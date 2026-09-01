@@ -1,0 +1,838 @@
+q<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>达芬奇密码 (Da Vinci Code) - 4人对局</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Card Flip animations and stylized board */
+    .poker-table {
+      background: radial-gradient(circle, #1c4b27 0%, #0d2b14 100%);
+      box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
+    }
+    .card-shadow {
+      box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.4);
+    }
+    .card-transition {
+      transition: all 0.25s ease-in-out;
+    }
+    .card-hover:hover {
+      transform: translateY(-8px) scale(1.05);
+    }
+    /* Custom Scrollbar for Logs */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white font-sans min-h-screen flex flex-col justify-between overflow-x-hidden select-none">
+
+  <!-- Header / Navigation -->
+  <header class="bg-gray-800/80 backdrop-blur border-b border-gray-700 px-4 py-3 flex justify-between items-center z-10">
+    <div class="flex items-center space-x-3">
+      <i class="fa-solid me-1 fa-key text-yellow-500 text-xl"></i>
+      <h1 class="text-xl font-bold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 to-amber-200">
+        达芬奇密码 <span class="text-xs text-gray-400 font-normal">Da Vinci Code</span>
+      </h1>
+    </div>
+    <div class="flex items-center space-x-3 text-sm">
+      <button onclick="toggleHelpModal()" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 transition flex items-center space-x-1">
+        <i class="fa-solid fa-circle-question text-yellow-400"></i>
+        <span>规则</span>
+      </button>
+      <button onclick="restartGame()" class="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 font-medium transition flex items-center space-x-1">
+        <i class="fa-solid fa-rotate-right"></i>
+        <span>新局</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Game Layout -->
+  <main class="flex-1 relative flex flex-col justify-between p-2 md:p-6 poker-table">
+    
+    <!-- Top Player: AI 2 -->
+    <div class="flex flex-col items-center z-10">
+      <div id="player-2-status" class="flex items-center space-x-2 bg-gray-900/80 px-4 py-1.5 rounded-full border border-gray-700 mb-2">
+        <div class="w-3 h-3 rounded-full bg-gray-500" id="p2-indicator"></div>
+        <span class="font-bold text-sm" id="p2-name">AI 伙伴 2</span>
+        <span class="text-xs text-gray-400" id="p2-cards-count">(3张)</span>
+      </div>
+      <div id="p2-hand" class="flex space-x-2 min-h-[90px] items-center justify-center"></div>
+    </div>
+
+    <!-- Middle Section: AI 1 (Left), Center Deck & Logs, AI 3 (Right) -->
+    <div class="flex justify-between items-center my-4 w-full max-w-6xl mx-auto px-2">
+      
+      <!-- Left Player: AI 1 -->
+      <div class="flex flex-col items-center z-10">
+        <div id="player-1-status" class="flex items-center space-x-2 bg-gray-900/80 px-3 py-1.5 rounded-full border border-gray-700 mb-2">
+          <div class="w-3 h-3 rounded-full bg-gray-500" id="p1-indicator"></div>
+          <span class="font-bold text-sm" id="p1-name">AI 伙伴 1</span>
+        </div>
+        <div id="p1-hand" class="flex flex-col space-y-2 min-w-[70px] items-center"></div>
+      </div>
+
+      <!-- Center Table: Deck, Drawn Card & Action Center -->
+      <div class="flex flex-col items-center justify-center bg-gray-900/40 p-4 rounded-2xl border border-emerald-900/50 max-w-md w-full mx-2 backdrop-blur-sm">
+        
+        <!-- Game Stage Indicator / Instruction Bar -->
+        <div id="status-banner" class="text-center font-bold text-amber-300 text-sm md:text-base mb-3 min-h-[48px] flex items-center justify-center px-4 bg-gray-800/90 rounded-lg border border-amber-500/30 w-full shadow-lg">
+          游戏准备中...
+        </div>
+
+        <!-- Draw Pile & Community Area -->
+        <div class="flex items-center justify-center space-x-6 my-2">
+          <!-- Deck -->
+          <div class="flex flex-col items-center">
+            <span class="text-xs text-gray-300 mb-1 font-semibold">中央牌堆</span>
+            <div id="draw-deck" class="relative w-14 h-20 md:w-16 md:h-24 bg-gradient-to-br from-amber-800 to-amber-950 rounded-lg border-2 border-amber-500 flex items-center justify-center card-shadow cursor-pointer hover:scale-105 transition">
+              <i class="fa-solid fa-layer-group text-2xl text-amber-400"></i>
+              <span id="deck-count" class="absolute -top-2 -right-2 bg-amber-500 text-black font-extrabold text-xs px-2 py-0.5 rounded-full shadow">0</span>
+            </div>
+          </div>
+
+          <!-- Drawn Card Container -->
+          <div class="flex flex-col items-center">
+            <span class="text-xs text-gray-300 mb-1 font-semibold">本回合摸牌</span>
+            <div id="drawn-card-slot" class="w-14 h-20 md:w-16 md:h-24 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center text-gray-500">
+              <span class="text-xs">无</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Control Buttons for Human Player -->
+        <div id="human-controls" class="flex space-x-3 mt-4 hidden">
+          <button id="btn-end-turn" onclick="humanPassTurn()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-md transition flex items-center space-x-1">
+            <i class="fa-solid fa-flag-checkered"></i>
+            <span>见好就收 (结束回合)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Player: AI 3 -->
+      <div class="flex flex-col items-center z-10">
+        <div id="player-3-status" class="flex items-center space-x-2 bg-gray-900/80 px-3 py-1.5 rounded-full border border-gray-700 mb-2">
+          <div class="w-3 h-3 rounded-full bg-gray-500" id="p3-indicator"></div>
+          <span class="font-bold text-sm" id="p3-name">AI 伙伴 3</span>
+        </div>
+        <div id="p3-hand" class="flex flex-col space-y-2 min-w-[70px] items-center"></div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Player: Human (Player 0) -->
+    <div class="flex flex-col items-center z-10 mt-2">
+      <div id="player-0-status" class="flex items-center space-x-2 bg-gray-900/90 px-4 py-1.5 rounded-full border border-yellow-500/50 mb-2">
+        <div class="w-3 h-3 rounded-full bg-emerald-500" id="p0-indicator"></div>
+        <span class="font-bold text-sm text-yellow-400">你 (Player)</span>
+        <span class="text-xs text-gray-400" id="p0-cards-count">(0张)</span>
+      </div>
+      <div id="p0-hand" class="flex space-x-2 md:space-x-3 min-h-[95px] items-center justify-center p-2 rounded-xl bg-black/30 backdrop-blur-sm border border-white/10"></div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Log Panel / Assistant -->
+  <footer class="bg-gray-800 border-t border-gray-700 p-3 h-32 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+    <div class="flex-1 flex flex-col">
+      <div class="flex justify-between items-center mb-1">
+        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider"><i class="fa-solid fa-list-ul me-1"></i> 对局日志</span>
+        <span class="text-[10px] text-gray-500">自动记录猜测与暴露卡牌</span>
+      </div>
+      <div id="game-logs" class="flex-1 bg-gray-900/90 rounded p-2 overflow-y-auto text-xs font-mono space-y-1 border border-gray-700/50">
+        <div class="text-gray-500">游戏准备就绪...</div>
+      </div>
+    </div>
+    
+    <!-- Smart Assistant Helper for Human Player -->
+    <div class="w-full md:w-72 bg-gray-900/90 rounded p-2 border border-yellow-900/30 flex flex-col">
+      <span class="text-xs font-bold text-yellow-400 mb-1 flex items-center">
+        <i class="fa-solid fa-lightbulb me-1"></i> 推理助手
+      </span>
+      <div id="assistant-info" class="text-xs text-gray-300 flex-1 flex flex-col justify-center">
+        点击对手的未翻开卡牌进行猜测。由于排序规则：数字小在左，大在右；若数相同，黑色在左。
+      </div>
+    </div>
+  </footer>
+
+  <!-- Guess Input Modal -->
+  <div id="guess-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-800 border border-yellow-500/40 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+      <h3 class="text-lg font-bold text-yellow-400 mb-2 flex items-center">
+        <i class="fa-solid fa-crosshair me-2"></i> 进行猜牌
+      </h3>
+      <p id="guess-modal-target-desc" class="text-sm text-gray-300 mb-4">
+        请选择该卡牌（<span id="target-color-text" class="font-bold"></span>）的正确数字：
+      </p>
+
+      <!-- Number Select Buttons (0 to 11) -->
+      <div class="grid grid-cols-4 gap-2 mb-6" id="number-btn-grid">
+        <!-- JS generates 0-11 buttons -->
+      </div>
+
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeGuessModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help / Rules Modal -->
+  <div id="help-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[85vh] flex flex-col">
+      <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
+        <h3 class="text-lg font-bold text-yellow-400 flex items-center">
+          <i class="fa-solid fa-book-open me-2"></i> 规则指南
+        </h3>
+        <button onclick="toggleHelpModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+      </div>
+      <div class="text-sm text-gray-300 space-y-3 overflow-y-auto pr-2 flex-1">
+        <p><strong class="text-yellow-300">1. 卡牌构成：</strong> 牌堆包含 0-11 的黑牌和白牌各 12 张，共 24 张。</p>
+        <p><strong class="text-yellow-300">2. 排序规则（极度重要）：</strong> 手牌从左到右按<span class="text-amber-400">从小到大</span>排列。如果出现数字完全相同的黑牌和白牌，<span class="text-amber-400">黑牌必须放在白牌的左侧</span>。</p>
+        <p><strong class="text-yellow-300">3. 回合流程：</strong>
+          <br>• 摸一张牌（仅自己可见）。
+          <br>• 指认任意一位对手的一张盖扣牌并猜测其数字。
+          <br>• <strong>猜对：</strong> 对手翻开该牌。你可以选择【继续猜】或者【见好就收结束回合】。
+          <br>• <strong>猜错：</strong> 你的回合结束，且你**刚才摸到的那张牌**必须公开并插入手牌中。
+        </p>
+        <p><strong class="text-yellow-300">4. 胜负判定：</strong> 坚持到最后一位手牌未被全部猜出的玩家获胜！</p>
+      </div>
+      <div class="mt-4 pt-2 border-t border-gray-700 flex justify-end">
+        <button onclick="toggleHelpModal()" class="px-5 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg font-bold text-sm transition">明白</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Logic Script -->
+  <script>
+    /**
+     * Da Vinci Code Game State & Engine
+     */
+    let players = [];
+    let deck = [];
+    let turnIndex = 0; // 0: Human, 1: AI 1, 2: AI 2, 3: AI 3
+    let currentDrawnCard = null;
+    let isHumanTurnActive = false;
+    let selectedTargetTile = null; // { playerIndex, cardIndex }
+    let isGameOver = false;
+
+    const PLAYER_NAMES = ["玩家 (你)", "AI 夏洛克", "AI 华生", "AI 莫里亚蒂"];
+    const COLOR_NAMES = { black: '黑色', white: '白色' };
+
+    // Initial setup when DOM loads
+    window.onload = function() {
+      initNumberGrid();
+      restartGame();
+    };
+
+    // Toggle Help Modal
+    function toggleHelpModal() {
+      const modal = document.getElementById('help-modal');
+      modal.classList.toggle('hidden');
+    }
+
+    // Build grid of 0-11 buttons in guess modal
+    function initNumberGrid() {
+      const grid = document.getElementById('number-btn-grid');
+      grid.innerHTML = '';
+      for (let i = 0; i <= 11; i++) {
+        const btn = document.createElement('button');
+        btn.className = "py-2.5 rounded-lg font-bold text-lg bg-gray-700 hover:bg-amber-600 hover:text-white border border-gray-600 transition shadow";
+        btn.innerText = i;
+        btn.onclick = () => submitHumanGuess(i);
+        grid.appendChild(btn);
+      }
+    }
+
+    // Initialize/Restart Game
+    function restartGame() {
+      deck = [];
+      players = [];
+      turnIndex = 0;
+      currentDrawnCard = null;
+      isHumanTurnActive = false;
+      selectedTargetTile = null;
+      isGameOver = false;
+
+      // 1. Create deck (0 to 11 Black and White)
+      for (let num = 0; num <= 11; num++) {
+        deck.push({ id: `b_${num}`, color: 'black', num: num, revealed: false });
+        deck.push({ id: `w_${num}`, color: 'white', num: num, revealed: false });
+      }
+
+      // Shuffle Deck
+      deck.sort(() => Math.random() - 0.5);
+
+      // 2. Init Players
+      for (let i = 0; i < 4; i++) {
+        players.push({
+          id: i,
+          name: PLAYER_NAMES[i],
+          hand: [],
+          isAi: i !== 0,
+          isEliminated: false
+        });
+      }
+
+      // 3. Deal 3 initial cards each for 4-player rules
+      for (let r = 0; r < 3; r++) {
+        for (let p = 0; p < 4; p++) {
+          if (deck.length > 0) {
+            players[p].hand.push(deck.pop());
+          }
+        }
+      }
+
+      // 4. Sort hands according to Da Vinci Code rules:
+      // Ascending number; if number equal, Black comes BEFORE White.
+      for (let p = 0; p < 4; p++) {
+        sortHand(players[p].hand);
+      }
+
+      document.getElementById('game-logs').innerHTML = '';
+      addLog("🎲 游戏重新开始！牌组已洗匀，4名玩家各发 3 张手牌。", "text-yellow-400 font-bold");
+
+      updateUI();
+      startTurn();
+    }
+
+    // Sort hand by value and color priority (Black left of White if equal)
+    function sortHand(hand) {
+      hand.sort((a, b) => {
+        if (a.num !== b.num) return a.num - b.num;
+        return a.color === 'black' ? -1 : 1;
+      });
+    }
+
+    // Main Turn Loop Control
+    function startTurn() {
+      if (checkGameOver()) return;
+
+      // Skip eliminated player
+      if (players[turnIndex].isEliminated) {
+        nextTurn();
+        return;
+      }
+
+      updateUI();
+      const activePlayer = players[turnIndex];
+
+      addLog(`▶ 轮到 【${activePlayer.name}】 的回合`, "text-amber-300 font-semibold mt-2");
+
+      if (activePlayer.id === 0) {
+        // Human player turn logic
+        isHumanTurnActive = true;
+        if (deck.length > 0) {
+          updateStatusBanner(`你的回合：请点击【中央牌堆】摸一张牌`);
+          document.getElementById('draw-deck').classList.add('animate-bounce');
+        } else {
+          updateStatusBanner(`牌堆已空，请点击对手的【隐藏牌】进行猜牌`);
+          currentDrawnCard = null;
+          showHumanGuessOptions();
+        }
+      } else {
+        // AI player turn logic
+        isHumanTurnActive = false;
+        document.getElementById('draw-deck').classList.remove('animate-bounce');
+        updateStatusBanner(`【${activePlayer.name}】 思考中...`);
+        setTimeout(() => executeAiTurn(activePlayer), 1200);
+      }
+    }
+
+    // Advance to next turn
+    function nextTurn() {
+      currentDrawnCard = null;
+      document.getElementById('human-controls').classList.add('hidden');
+      document.getElementById('draw-deck').classList.remove('animate-bounce');
+
+      let activeCount = players.filter(p => !p.isEliminated).length;
+      if (activeCount <= 1) {
+        checkGameOver();
+        return;
+      }
+
+      do {
+        turnIndex = (turnIndex + 1) % 4;
+      } while (players[turnIndex].isEliminated);
+
+      startTurn();
+    }
+
+    // Human clicks Deck to draw
+    document.getElementById('draw-deck').onclick = function() {
+      if (!isHumanTurnActive || currentDrawnCard !== null) return;
+      if (deck.length === 0) return;
+
+      document.getElementById('draw-deck').classList.remove('animate-bounce');
+      currentDrawnCard = deck.pop();
+      addLog(`你摸到了了一张 <span class="text-yellow-300">${COLOR_NAMES[currentDrawnCard.color]} ${currentDrawnCard.num}</span>（仅你可见）。`);
+
+      updateUI();
+      showHumanGuessOptions();
+    };
+
+    function showHumanGuessOptions() {
+      updateStatusBanner(`请点击任意一位对手未翻开的【卡牌】进行猜牌`);
+      document.getElementById('human-controls').classList.remove('hidden');
+    }
+
+    // Human player chooses to stop turn (Pass)
+    function humanPassTurn() {
+      if (!isHumanTurnActive) return;
+
+      if (currentDrawnCard) {
+        // Insert drawn card into hand unrevealed
+        players[0].hand.push(currentDrawnCard);
+        sortHand(players[0].hand);
+        addLog(`你选择见好就收，结束了回合。摸到的牌已隐蔽加入手牌。`);
+        currentDrawnCard = null;
+      } else {
+        addLog(`你结束了回合。`);
+      }
+
+      isHumanTurnActive = false;
+      updateUI();
+      nextTurn();
+    }
+
+    // Open Modal when Human clicks an Opponent Card
+    function openGuessModal(playerIndex, cardIndex) {
+      if (!isHumanTurnActive) return;
+      if (playerIndex === 0) return; // Cannot guess self
+      if (players[playerIndex].hand[cardIndex].revealed) return; // Already revealed
+
+      selectedTargetTile = { playerIndex, cardIndex };
+      const targetCard = players[playerIndex].hand[cardIndex];
+
+      const targetColorText = document.getElementById('target-color-text');
+      targetColorText.innerText = COLOR_NAMES[targetCard.color];
+      targetColorText.className = targetCard.color === 'black' ? 'font-bold text-gray-400' : 'font-bold text-white';
+
+      document.getElementById('guess-modal-target-desc').innerHTML = 
+        `猜测 【${players[playerIndex].name}】 的第 <span class="text-amber-400 font-bold">${cardIndex + 1}</span> 张牌（<span class="${targetCard.color === 'black' ? 'text-gray-300' : 'text-white'} font-bold">${COLOR_NAMES[targetCard.color]}</span>）为：`;
+
+      document.getElementById('guess-modal').classList.remove('hidden');
+    }
+
+    function closeGuessModal() {
+      document.getElementById('guess-modal').classList.add('hidden');
+      selectedTargetTile = null;
+    }
+
+    // Submit Human Guess
+    function submitHumanGuess(guessedNum) {
+      if (!selectedTargetTile) return;
+
+      const { playerIndex, cardIndex } = selectedTargetTile;
+      closeGuessModal();
+
+      const targetPlayer = players[playerIndex];
+      const targetCard = targetPlayer.hand[cardIndex];
+
+      addLog(`你猜测 【${targetPlayer.name}】 的第 ${cardIndex + 1} 张牌为 <span class="text-cyan-300 font-bold">${guessedNum}</span>...`);
+
+      if (targetCard.num === guessedNum) {
+        // SUCCESS
+        targetCard.revealed = true;
+        addLog(`🎯 <span class="text-green-400 font-bold">猜对了！</span> 【${targetPlayer.name}】 翻开了牌：<span class="text-yellow-300 font-bold">${COLOR_NAMES[targetCard.color]} ${targetCard.num}</span>！`);
+        
+        checkPlayerElimination(playerIndex);
+
+        if (checkGameOver()) return;
+
+        updateUI();
+        updateStatusBanner(`猜对了！你可以选择【继续猜对手的牌】或点击【见好就收】`);
+      } else {
+        // FAILURE
+        addLog(`❌ <span class="text-red-400 font-bold">猜错了！</span>（正确并非 ${guessedNum}）`);
+        
+        if (currentDrawnCard) {
+          currentDrawnCard.revealed = true;
+          players[0].hand.push(currentDrawnCard);
+          sortHand(players[0].hand);
+          addLog(`按照规则，你展示了刚才摸到的牌：<span class="text-red-300 font-bold">${COLOR_NAMES[currentDrawnCard.color]} ${currentDrawnCard.num}</span> 并放入手牌。`);
+          currentDrawnCard = null;
+        }
+
+        isHumanTurnActive = false;
+        updateUI();
+        setTimeout(nextTurn, 1800);
+      }
+    }
+
+    /**
+     * AI Logic Implementation
+     */
+    function executeAiTurn(aiPlayer) {
+      if (isGameOver) return;
+
+      // 1. Draw card if deck has cards
+      let drawnCard = null;
+      if (deck.length > 0) {
+        drawnCard = deck.pop();
+        addLog(`【${aiPlayer.name}】 从中央牌堆摸了一张牌。`);
+      }
+
+      // 2. Select a target to guess
+      const candidateTargets = [];
+      players.forEach((p, pIdx) => {
+        if (pIdx !== aiPlayer.id && !p.isEliminated) {
+          p.hand.forEach((card, cIdx) => {
+            if (!card.revealed) {
+              candidateTargets.push({ playerIndex: pIdx, cardIndex: cIdx, card: card });
+            }
+          });
+        }
+      });
+
+      if (candidateTargets.length === 0) {
+        nextTurn();
+        return;
+      }
+
+      // Pick target (AI strategy: prefer players with fewer remaining hidden cards)
+      candidateTargets.sort((a, b) => {
+        let unrevA = players[a.playerIndex].hand.filter(c => !c.revealed).length;
+        let unrevB = players[b.playerIndex].hand.filter(c => !c.revealed).length;
+        return unrevA - unrevB;
+      });
+
+      const chosenTarget = candidateTargets[0];
+      const targetPlayer = players[chosenTarget.playerIndex];
+      const targetCard = targetPlayer.hand[chosenTarget.cardIndex];
+
+      // Calculate possible range based on rules
+      const possibleNums = getPossibleNumbersForCard(chosenTarget.playerIndex, chosenTarget.cardIndex, aiPlayer);
+      
+      // Pick random number from logical possible pool
+      let guessedNum = possibleNums[Math.floor(Math.random() * possibleNums.length)];
+      if (guessedNum === undefined) guessedNum = Math.floor(Math.random() * 12);
+
+      addLog(`【${aiPlayer.name}】 指着 【${targetPlayer.name}】 的第 ${chosenTarget.cardIndex + 1} 张牌，猜测是 <span class="text-cyan-300 font-bold">${guessedNum}</span>...`);
+
+      setTimeout(() => {
+        if (targetCard.num === guessedNum) {
+          // AI Guessed correctly
+          targetCard.revealed = true;
+          addLog(`🎯 【${aiPlayer.name}】 <span class="text-green-400 font-bold">猜对了！</span> 【${targetPlayer.name}】 翻开了牌：<span class="text-yellow-300 font-bold">${COLOR_NAMES[targetCard.color]} ${targetCard.num}</span>`);
+          
+          checkPlayerElimination(chosenTarget.playerIndex);
+
+          if (checkGameOver()) return;
+
+          updateUI();
+
+          // AI decides whether to continue (50% chance or if drawnCard exists)
+          let remainingHidden = targetPlayer.hand.filter(c => !c.revealed).length;
+          if (Math.random() > 0.45 || remainingHidden === 0) {
+            addLog(`【${aiPlayer.name}】 决定继续进行连击猜牌！`);
+            setTimeout(() => executeAiTurnChain(aiPlayer, drawnCard), 1500);
+          } else {
+            addLog(`【${aiPlayer.name}】 选择稳妥停手，结束回合。`);
+            if (drawnCard) {
+              aiPlayer.hand.push(drawnCard);
+              sortHand(aiPlayer.hand);
+            }
+            updateUI();
+            setTimeout(nextTurn, 1200);
+          }
+        } else {
+          // AI Guessed wrong
+          addLog(`❌ 【${aiPlayer.name}】 <span class="text-red-400 font-bold">猜错了！</span>`);
+          if (drawnCard) {
+            drawnCard.revealed = true;
+            aiPlayer.hand.push(drawnCard);
+            sortHand(aiPlayer.hand);
+            addLog(`【${aiPlayer.name}】 公开展示了摸到的牌：<span class="text-red-300 font-bold">${COLOR_NAMES[drawnCard.color]} ${drawnCard.num}</span> 并插入手牌。`);
+          }
+          updateUI();
+          setTimeout(nextTurn, 1500);
+        }
+      }, 1200);
+    }
+
+    // AI Chained Guess (Already has drawn card in hand or deck empty)
+    function executeAiTurnChain(aiPlayer, drawnCard) {
+      if (isGameOver) return;
+
+      const candidateTargets = [];
+      players.forEach((p, pIdx) => {
+        if (pIdx !== aiPlayer.id && !p.isEliminated) {
+          p.hand.forEach((card, cIdx) => {
+            if (!card.revealed) {
+              candidateTargets.push({ playerIndex: pIdx, cardIndex: cIdx, card: card });
+            }
+          });
+        }
+      });
+
+      if (candidateTargets.length === 0) {
+        if (drawnCard) {
+          aiPlayer.hand.push(drawnCard);
+          sortHand(aiPlayer.hand);
+        }
+        nextTurn();
+        return;
+      }
+
+      const chosenTarget = candidateTargets[Math.floor(Math.random() * candidateTargets.length)];
+      const targetPlayer = players[chosenTarget.playerIndex];
+      const targetCard = targetPlayer.hand[chosenTarget.cardIndex];
+
+      const possibleNums = getPossibleNumbersForCard(chosenTarget.playerIndex, chosenTarget.cardIndex, aiPlayer);
+      let guessedNum = possibleNums[Math.floor(Math.random() * possibleNums.length)];
+      if (guessedNum === undefined) guessedNum = Math.floor(Math.random() * 12);
+
+      addLog(`【${aiPlayer.name}】 再次指着 【${targetPlayer.name}】 的第 ${chosenTarget.cardIndex + 1} 张牌，猜测是 <span class="text-cyan-300 font-bold">${guessedNum}</span>...`);
+
+      setTimeout(() => {
+        if (targetCard.num === guessedNum) {
+          targetCard.revealed = true;
+          addLog(`🎯 【${aiPlayer.name}】 <span class="text-green-400 font-bold">再次猜对！</span> 【${targetPlayer.name}】 翻牌：<span class="text-yellow-300 font-bold">${COLOR_NAMES[targetCard.color]} ${targetCard.num}</span>`);
+          
+          checkPlayerElimination(chosenTarget.playerIndex);
+
+          if (checkGameOver()) return;
+
+          updateUI();
+
+          // AI Stop chain
+          addLog(`【${aiPlayer.name}】 见好就收，结束回合。`);
+          if (drawnCard) {
+            aiPlayer.hand.push(drawnCard);
+            sortHand(aiPlayer.hand);
+          }
+          updateUI();
+          setTimeout(nextTurn, 1200);
+        } else {
+          addLog(`❌ 【${aiPlayer.name}】 猜错了！`);
+          if (drawnCard) {
+            drawnCard.revealed = true;
+            aiPlayer.hand.push(drawnCard);
+            sortHand(aiPlayer.hand);
+            addLog(`【${aiPlayer.name}】 公开了刚才的摸牌：<span class="text-red-300 font-bold">${COLOR_NAMES[drawnCard.color]} ${drawnCard.num}</span>`);
+          }
+          updateUI();
+          setTimeout(nextTurn, 1500);
+        }
+      }, 1200);
+    }
+
+    /**
+     * Deduction Assistant Helper Algorithm
+     */
+    function getPossibleNumbersForCard(targetPlayerIdx, cardIndex, observerPlayer) {
+      const targetHand = players[targetPlayerIdx].hand;
+      const targetCard = targetHand[cardIndex];
+
+      let min = 0;
+      let max = 11;
+
+      // Find bound from left (Cards to the left must be strictly smaller or equal)
+      for (let i = cardIndex - 1; i >= 0; i--) {
+        if (targetHand[i].revealed || targetPlayerIdx === observerPlayer.id) {
+          min = Math.max(min, targetHand[i].num);
+          // If previous left card has SAME color, target MUST be strictly greater
+          if (targetHand[i].num === min && targetHand[i].color === targetCard.color) {
+            min = min + 1;
+          }
+          break;
+        }
+      }
+
+      // Find bound from right
+      for (let i = cardIndex + 1; i < targetHand.length; i++) {
+        if (targetHand[i].revealed || targetPlayerIdx === observerPlayer.id) {
+          max = Math.min(max, targetHand[i].num);
+          if (targetHand[i].num === max && targetHand[i].color === targetCard.color) {
+            max = max - 1;
+          }
+          break;
+        }
+      }
+
+      // Gather all visible numbers (Observer's hand + all revealed cards)
+      const visibleNumbers = new Set();
+
+      // Add observer's known cards
+      observerPlayer.hand.forEach(c => visibleNumbers.add(`${c.color}_${c.num}`));
+      if (currentDrawnCard && observerPlayer.id === 0) {
+        visibleNumbers.add(`${currentDrawnCard.color}_${currentDrawnCard.num}`);
+      }
+
+      // Add all globally revealed cards
+      players.forEach(p => {
+        p.hand.forEach(c => {
+          if (c.revealed) visibleNumbers.add(`${c.color}_${c.num}`);
+        });
+      });
+
+      const possible = [];
+      for (let n = min; n <= max; n++) {
+        // If this specific color + number is already visible somewhere else, it's impossible!
+        if (!visibleNumbers.has(`${targetCard.color}_${n}`)) {
+          possible.push(n);
+        }
+      }
+
+      return possible.length > 0 ? possible : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    }
+
+    // Check if player's all cards are revealed
+    function checkPlayerElimination(pIdx) {
+      const p = players[pIdx];
+      const allRevealed = p.hand.every(c => c.revealed);
+      if (allRevealed && !p.isEliminated) {
+        p.isEliminated = true;
+        addLog(`💥 【${p.name}】 的手牌已全部暴露，惨遭淘汰！`, "text-red-400 font-bold bg-red-950/40 p-1 rounded");
+      }
+    }
+
+    // Check victory condition
+    function checkGameOver() {
+      const activePlayers = players.filter(p => !p.isEliminated);
+      if (activePlayers.length === 1) {
+        isGameOver = true;
+        const winner = activePlayers[0];
+        updateStatusBanner(`🏆 游戏结束！胜利者是：【${winner.name}】！`);
+        addLog(`🎉🎉 游戏结束！【${winner.name}】 获得了最终胜利！🎉🎉`, "text-yellow-300 font-extrabold text-sm py-2");
+        
+        // Reveal all cards
+        players.forEach(p => p.hand.forEach(c => c.revealed = true));
+        updateUI();
+        document.getElementById('human-controls').classList.add('hidden');
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * UI Rendering Engine
+     */
+    function updateUI() {
+      // Update deck count
+      document.getElementById('deck-count').innerText = deck.length;
+
+      // Update Drawn card slot
+      const drawnSlot = document.getElementById('drawn-card-slot');
+      if (currentDrawnCard) {
+        drawnSlot.innerHTML = renderCardHTML(currentDrawnCard, true, false);
+      } else {
+        drawnSlot.innerHTML = `<span class="text-xs text-gray-500">空</span>`;
+      }
+
+      // Update active turn indicators
+      players.forEach((p, idx) => {
+        const indicator = document.getElementById(`p${idx}-indicator`);
+        const statusBox = document.getElementById(`player-${idx}-status`);
+
+        if (p.isEliminated) {
+          indicator.className = "w-3 h-3 rounded-full bg-red-600";
+          statusBox.classList.add('opacity-40');
+        } else if (turnIndex === idx) {
+          indicator.className = "w-3 h-3 rounded-full bg-yellow-400 animate-ping";
+          statusBox.classList.remove('opacity-40');
+          statusBox.classList.add('border-yellow-400');
+        } else {
+          indicator.className = "w-3 h-3 rounded-full bg-gray-500";
+          statusBox.classList.remove('opacity-40', 'border-yellow-400');
+        }
+
+        // Card count text
+        const unrevCount = p.hand.filter(c => !c.revealed).length;
+        const countText = document.getElementById(`p${idx}-cards-count`);
+        if (countText) countText.innerText = `(${unrevCount}/${p.hand.length}张未显)`;
+      });
+
+      // Render Player Hands
+      players.forEach((p, idx) => {
+        const handElem = document.getElementById(`p${idx}-hand`);
+        handElem.innerHTML = '';
+
+        p.hand.forEach((card, cardIdx) => {
+          // Human sees their own cards numbers; AI cards only if revealed
+          const isOwner = (idx === 0);
+          const showNumber = isOwner || card.revealed;
+          
+          const cardWrapper = document.createElement('div');
+          cardWrapper.className = "relative cursor-pointer transition transform";
+          
+          // Click handler for human guessing opponent card
+          if (!isOwner && !card.revealed && isHumanTurnActive) {
+            cardWrapper.classList.add('hover:-translate-y-2', 'hover:scale-105', 'ring-2', 'ring-yellow-400/50', 'rounded-lg');
+            cardWrapper.onclick = () => {
+              openGuessModal(idx, cardIdx);
+              updateAssistantHint(idx, cardIdx);
+            };
+          }
+
+          cardWrapper.innerHTML = renderCardHTML(card, showNumber, !isOwner && !card.revealed);
+          handElem.appendChild(cardWrapper);
+        });
+      });
+    }
+
+    // Helper: Assistant hint calculation
+    function updateAssistantHint(targetPlayerIdx, cardIndex) {
+      if (targetPlayerIdx === 0) return;
+      const targetCard = players[targetPlayerIdx].hand[cardIndex];
+      const possible = getPossibleNumbersForCard(targetPlayerIdx, cardIndex, players[0]);
+      
+      const assistant = document.getElementById('assistant-info');
+      assistant.innerHTML = `
+        <div>目标：<strong>${players[targetPlayerIdx].name}</strong> 第 <strong>${cardIndex + 1}</strong> 张牌</div>
+        <div>牌颜色：<span class="${targetCard.color === 'black' ? 'text-gray-400 font-bold' : 'text-white font-bold'}">${COLOR_NAMES[targetCard.color]}</span></div>
+        <div class="mt-1 text-yellow-300 font-semibold">推测可能数值：[ ${possible.join(', ')} ]</div>
+      `;
+    }
+
+    // Render HTML for single card
+    function renderCardHTML(card, showNumber, isHiddenOpponent) {
+      const isBlack = card.color === 'black';
+      
+      const bgStyle = isBlack 
+        ? 'bg-gradient-to-b from-gray-800 to-black text-white border-gray-600' 
+        : 'bg-gradient-to-b from-white to-gray-200 text-gray-900 border-gray-300';
+      
+      const lockIcon = isHiddenOpponent ? `<div class="absolute top-1 right-1 text-[10px] text-yellow-500 opacity-60"><i class="fa-solid fa-lock"></i></div>` : '';
+
+      return `
+        <div class="w-12 h-16 md:w-14 md:h-20 rounded-lg border-2 ${bgStyle} flex flex-col items-center justify-center font-extrabold text-xl md:text-2xl card-shadow relative select-none card-transition">
+          ${lockIcon}
+          ${showNumber 
+            ? `<span>${card.num}</span>` 
+            : `<i class="fa-solid fa-question text-lg opacity-40"></i>`
+          }
+          <div class="absolute bottom-1 text-[9px] uppercase tracking-tighter opacity-50">
+            ${isBlack ? 'BLACK' : 'WHITE'}
+          </div>
+        </div>
+      `;
+    }
+
+    // Log helper
+    function addLog(msg, customClass = "text-gray-300") {
+      const logs = document.getElementById('game-logs');
+      const item = document.createElement('div');
+      item.className = customClass;
+      item.innerHTML = msg;
+      logs.appendChild(item);
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    function updateStatusBanner(text) {
+      document.getElementById('status-banner').innerHTML = text;
+    }
+  </script>
+</body>
+</html>
