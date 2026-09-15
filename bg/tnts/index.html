@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>帐篷与树 (Tents and Trees)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        forest: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            500: '#22c55e',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                            950: '#052e16',
+                        },
+                        wood: {
+                            400: '#a16207',
+                            500: '#854d0e',
+                            700: '#713f12',
+                            900: '#451a03',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Canvas Confetti for winning animation -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        .cell-tree { animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .cell-tent { animation: bounceIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .cell-grass { animation: fadeIn 0.2s ease-out; }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        /* Prevent text selection and zoom on touch */
+        .no-select {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between overflow-x-hidden font-sans no-select bg-gradient-to-br from-slate-950 via-slate-900 to-forest-950">
+
+    <!-- Top Header -->
+    <header class="w-full max-w-2xl mx-auto pt-4 px-4 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="p-2 bg-emerald-600/30 rounded-xl border border-emerald-500/30 text-2xl">
+                🌲⛺
+            </div>
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
+                    帐篷与树
+                </h1>
+                <p class="text-xs text-slate-400">逻辑解谜游戏</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="btn-rules" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-sm flex items-center gap-1 border border-slate-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span class="hidden sm:inline">规则</span>
+            </button>
+            <button id="btn-restart" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-sm flex items-center gap-1 border border-slate-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span class="hidden sm:inline">重置</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 my-2">
+        <!-- Control Bar (Difficulty & Timer) -->
+        <div class="w-full max-w-md glass-panel p-3 rounded-2xl mb-4 flex items-center justify-between gap-2 shadow-xl">
+            <!-- Difficulty Selector -->
+            <div class="flex items-center gap-1 bg-slate-950/50 p-1 rounded-xl border border-slate-800">
+                <button class="diff-btn px-2.5 py-1 text-xs font-semibold rounded-lg transition" data-size="5">5x5</button>
+                <button class="diff-btn px-2.5 py-1 text-xs font-semibold rounded-lg transition" data-size="6">6x6</button>
+                <button class="diff-btn px-2.5 py-1 text-xs font-semibold rounded-lg transition" data-size="8">8x8</button>
+            </div>
+
+            <!-- Stats: Timer & Moves -->
+            <div class="flex items-center gap-4 text-xs sm:text-sm font-mono text-slate-300">
+                <div class="flex items-center gap-1" title="用时">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span id="timer-text">00:00</span>
+                </div>
+            </div>
+
+            <!-- Action: New Game -->
+            <button id="btn-new" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-emerald-900/40 transition">
+                新局
+            </button>
+        </div>
+
+        <!-- Game Board Card -->
+        <div class="glass-panel p-3 sm:p-5 rounded-3xl shadow-2xl max-w-md w-full flex flex-col items-center border border-slate-700/50 relative">
+            
+            <!-- Game Grid Container -->
+            <div id="board-container" class="relative select-none flex justify-center items-center">
+                <!-- Grid dynamically rendered via JS -->
+            </div>
+
+            <!-- Tool selector for Mobile & Quick mode -->
+            <div class="mt-4 w-full flex items-center justify-between gap-2 bg-slate-950/60 p-2 rounded-2xl border border-slate-800">
+                <div class="flex items-center gap-1.5">
+                    <button id="tool-auto" class="tool-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-600 text-white shadow-md transition">
+                        <span class="text-base">🔄</span> 循环模式
+                    </button>
+                    <button id="tool-tent" class="tool-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+                        <span class="text-base">⛺</span> 帐篷
+                    </button>
+                    <button id="tool-grass" class="tool-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+                        <span class="text-base">🟩</span> 草地
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button id="btn-undo" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 transition" title="撤销">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                    </button>
+                    <button id="btn-hint" class="p-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 active:scale-95 transition border border-amber-500/30" title="获得提示">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mt-2 text-[11px] text-slate-400 text-center">
+                提示：电脑端可右键点击快速填草 | 双击或长按格子亦可
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-3 text-xs text-slate-500">
+        帐篷与树 (Tents and Trees) Logic Puzzle &copy; 2026
+    </footer>
+
+    <!-- Rules Modal -->
+    <div id="modal-rules" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 p-6 rounded-3xl max-w-md w-full shadow-2xl text-slate-200">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2">
+                    <span>📖</span> 游戏规则
+                </h2>
+                <button id="btn-close-rules" class="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed">
+                <div class="flex items-start gap-2">
+                    <span class="text-base">1️⃣</span>
+                    <p><strong class="text-white">一树一帐：</strong>每棵树 (🌲) 的上下左右相邻 4 格中，必须且只能搭配一个帐篷 (⛺)。</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-base">2️⃣</span>
+                    <p><strong class="text-white">保持距离：</strong>任意两个帐篷不能相邻，包括横向、纵向和斜向（即周围 8 格不能有其他帐篷）。</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-base">3️⃣</span>
+                    <p><strong class="text-white">行列匹配：</strong>棋盘边缘的数字代表该行或该列必须包含的帐篷总数。</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-base">💡</span>
+                    <p><strong class="text-white">技巧：</strong>利用草地 (🟩) 标注确定没有帐篷的位置，逐步排除干扰！</p>
+                </div>
+            </div>
+            <button id="btn-ack-rules" class="mt-6 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition">
+                明白了，开始解谜！
+            </button>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="modal-victory" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-emerald-500/50 p-6 rounded-3xl max-w-sm w-full shadow-2xl text-center text-slate-200">
+            <div class="text-5xl mb-3">🎉</div>
+            <h2 class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
+                顺利破译！
+            </h2>
+            <p class="text-slate-400 text-sm mt-1">恭喜你成功搭建了所有露营帐篷！</p>
+            
+            <div class="my-6 py-3 px-4 bg-slate-800/80 rounded-2xl flex justify-around border border-slate-700">
+                <div>
+                    <div class="text-xs text-slate-400">通关用时</div>
+                    <div id="victory-time" class="text-lg font-bold text-emerald-400 font-mono">00:00</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400">难度</div>
+                    <div id="victory-diff" class="text-lg font-bold text-teal-400">5x5</div>
+                </div>
+            </div>
+
+            <button id="btn-next-game" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95">
+                下一局挑战
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // State Constants
+        const EMPTY = 0;
+        const TREE = 1;
+        const TENT = 2;
+        const GRASS = 3;
+
+        // Sound Effects Generator using Web Audio API
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playTone(freq, type = 'sine', duration = 0.1) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+            click() { this.playTone(600, 'triangle', 0.05); }
+            tent() { this.playTone(440, 'sine', 0.12); }
+            grass() { this.playTone(280, 'sine', 0.08); }
+            win() {
+                if (!this.ctx) return;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                    setTimeout(() => this.playTone(freq, 'triangle', 0.25), idx * 100);
+                });
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        // Game State Variables
+        let size = 5;
+        let board = [];       // Current player grid
+        let solution = [];    // Target grid with solution tents
+        let rowCounts = [];   // Expected tents per row
+        let colCounts = [];   // Expected tents per col
+        let history = [];     // Undo stack
+        let timer = 0;
+        let timerInterval = null;
+        let gameActive = false;
+        let currentTool = 'auto'; // 'auto', 'tent', 'grass'
+
+        // Puzzle Generator Algorithm
+        function generatePuzzle(gridSize) {
+            size = gridSize;
+            let attempts = 0;
+            let success = false;
+
+            while (!success && attempts < 100) {
+                attempts++;
+                // Reset arrays
+                solution = Array.from({ length: size }, () => Array(size).fill(EMPTY));
+                board = Array.from({ length: size }, () => Array(size).fill(EMPTY));
+                rowCounts = Array(size).fill(0);
+                colCounts = Array(size).fill(0);
+
+                // Determine target number of tents based on grid size
+                const targetTents = Math.floor(size * size * 0.22) + Math.floor(Math.random() * 2);
+                let placedTents = 0;
+
+                // Shuffle all coordinates
+                let coords = [];
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        coords.push({ r, c });
+                    }
+                }
+                coords.sort(() => Math.random() - 0.5);
+
+                // Try placing tents and adjacent trees
+                for (let coord of coords) {
+                    if (placedTents >= targetTents) break;
+                    const { r, c } = coord;
+
+                    // Check if tent can be placed (must not touch other tents diagonally or orthogonally)
+                    if (canPlaceTentInSolution(r, c)) {
+                        // Find potential adjacent positions for a tree
+                        const neighbors = [
+                            { r: r - 1, c }, { r: r + 1, c },
+                            { r, c: c - 1 }, { r, c: c + 1 }
+                        ].filter(p => p.r >= 0 && p.r < size && p.c >= 0 && p.c < size && solution[p.r][p.c] === EMPTY);
+
+                        if (neighbors.length > 0) {
+                            // Randomly pick a neighbor for the tree
+                            const treePos = neighbors[Math.floor(Math.random() * neighbors.length)];
+                            
+                            solution[r][c] = TENT;
+                            solution[treePos.r][treePos.c] = TREE;
+                            
+                            // Player board starts with tree visible
+                            board[treePos.r][treePos.c] = TREE;
+                            placedTents++;
+                        }
+                    }
+                }
+
+                if (placedTents >= Math.floor(size * size * 0.18)) {
+                    success = true;
+                }
+            }
+
+            // Calculate target row & col counts
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (solution[r][c] === TENT) {
+                        rowCounts[r]++;
+                        colCounts[c]++;
+                    }
+                }
+            }
+
+            history = [];
+            resetTimer();
+            startTimer();
+            gameActive = true;
+            renderBoard();
+        }
+
+        // Helper: Solution tent placement check
+        function canPlaceTentInSolution(r, c) {
+            if (solution[r][c] !== EMPTY) return false;
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+                        if (solution[nr][nc] === TENT) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timer = 0;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                if (gameActive) {
+                    timer++;
+                    updateTimerDisplay();
+                }
+            }, 1000);
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timer = 0;
+            updateTimerDisplay();
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timer / 60).toString().padStart(2, '0');
+            const secs = (timer % 60).toString().padStart(2, '0');
+            document.getElementById('timer-text').textContent = `${mins}:${secs}`;
+        }
+
+        // Render Game Board
+        function renderBoard() {
+            const container = document.getElementById('board-container');
+            container.innerHTML = '';
+
+            // Table / Grid Layout
+            const gridWrapper = document.createElement('div');
+            gridWrapper.className = 'grid gap-1 sm:gap-1.5 p-2 bg-slate-950/70 rounded-2xl border border-slate-800 shadow-inner';
+            
+            // Grid template columns: 1 for headers + size for cells
+            gridWrapper.style.gridTemplateColumns = `auto repeat(${size}, minmax(0, 1fr))`;
+
+            // Top-Left Empty Corner
+            const cornerCell = document.createElement('div');
+            cornerCell.className = 'w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-slate-600 text-xs font-bold';
+            gridWrapper.appendChild(cornerCell);
+
+            // Calculate current counts for validation display
+            const curRowCounts = Array(size).fill(0);
+            const curColCounts = Array(size).fill(0);
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (board[r][c] === TENT) {
+                        curRowCounts[r]++;
+                        curColCounts[c]++;
+                    }
+                }
+            }
+
+            // Top Row Header (Column Tent Counts)
+            for (let c = 0; c < size; c++) {
+                const header = document.createElement('div');
+                const target = colCounts[c];
+                const current = curColCounts[c];
+                let colorClass = 'text-slate-400';
+                if (current === target) colorClass = 'text-emerald-400 font-bold';
+                else if (current > target) colorClass = 'text-rose-500 font-bold animate-pulse';
+
+                header.className = `w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-sm sm:text-base font-mono ${colorClass} transition-colors`;
+                header.textContent = target;
+                gridWrapper.appendChild(header);
+            }
+
+            // Board Rows
+            for (let r = 0; r < size; r++) {
+                // Left Column Header (Row Tent Count)
+                const header = document.createElement('div');
+                const target = rowCounts[r];
+                const current = curRowCounts[r];
+                let colorClass = 'text-slate-400';
+                if (current === target) colorClass = 'text-emerald-400 font-bold';
+                else if (current > target) colorClass = 'text-rose-500 font-bold animate-pulse';
+
+                header.className = `w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-sm sm:text-base font-mono ${colorClass} transition-colors`;
+                header.textContent = target;
+                gridWrapper.appendChild(header);
+
+                // Row Grid Cells
+                for (let c = 0; c < size; c++) {
+                    const cellVal = board[r][c];
+                    const cell = document.createElement('button');
+                    
+                    // Dynamic Sizing based on grid dimensions
+                    const cellSizeClass = size <= 6 ? 'w-9 h-9 sm:w-11 sm:h-11 text-lg sm:text-2xl' : 'w-7 h-7 sm:w-9 sm:h-9 text-base sm:text-xl';
+                    
+                    cell.className = `${cellSizeClass} rounded-xl font-bold flex items-center justify-center transition-all duration-150 transform active:scale-95 focus:outline-none relative border `;
+
+                    // Visual Styling according to state
+                    if (cellVal === TREE) {
+                        cell.className += 'bg-slate-800/90 border-slate-700/80 cursor-default cell-tree shadow-sm';
+                        cell.innerHTML = '<span class="filter drop-shadow-md">🌲</span>';
+                    } else if (cellVal === TENT) {
+                        // Check if tent has conflict (adjacent tent or invalid tree neighbor)
+                        const hasConflict = checkTentConflict(r, c);
+                        if (hasConflict) {
+                            cell.className += 'bg-rose-950/80 border-rose-500/80 text-white cell-tent shadow-md shadow-rose-900/30';
+                        } else {
+                            cell.className += 'bg-amber-900/40 border-amber-500/60 text-white cell-tent shadow-md shadow-amber-900/20';
+                        }
+                        cell.innerHTML = '<span class="filter drop-shadow">⛺</span>';
+                    } else if (cellVal === GRASS) {
+                        cell.className += 'bg-emerald-950/40 border-emerald-800/30 text-emerald-500/60 cell-grass';
+                        cell.innerHTML = '<span class="text-xs sm:text-sm">🟩</span>';
+                    } else {
+                        // Empty cell
+                        cell.className += 'bg-slate-900/80 hover:bg-slate-800/60 border-slate-800 text-transparent';
+                    }
+
+                    // Event Listeners for Cell
+                    cell.addEventListener('click', (e) => handleCellClick(r, c, e));
+                    cell.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        handleCellRightClick(r, c);
+                    });
+
+                    gridWrapper.appendChild(cell);
+                }
+            }
+
+            container.appendChild(gridWrapper);
+        }
+
+        // Tent placement conflict detection
+        function checkTentConflict(r, c) {
+            if (board[r][c] !== TENT) return false;
+
+            // 1. Check surrounding 8 cells for other tents
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+                        if (board[nr][nc] === TENT) return true;
+                    }
+                }
+            }
+
+            // 2. Check if tent has at least 1 adjacent tree
+            const adjacentTrees = [
+                { r: r - 1, c }, { r: r + 1, c },
+                { r, c: c - 1 }, { r, c: c + 1 }
+            ].filter(p => p.r >= 0 && p.r < size && p.c >= 0 && p.c < size && board[p.r][p.c] === TREE);
+
+            return adjacentTrees.length === 0;
+        }
+
+        // Click Handler
+        function handleCellClick(r, c, event) {
+            if (!gameActive || board[r][c] === TREE) return;
+
+            sfx.init();
+            saveHistory();
+
+            const currentState = board[r][c];
+
+            if (currentTool === 'tent') {
+                board[r][c] = currentState === TENT ? EMPTY : TENT;
+                if (board[r][c] === TENT) sfx.tent(); else sfx.click();
+            } else if (currentTool === 'grass') {
+                board[r][c] = currentState === GRASS ? EMPTY : GRASS;
+                if (board[r][c] === GRASS) sfx.grass(); else sfx.click();
+            } else {
+                // Auto / Cycle mode: EMPTY -> TENT -> GRASS -> EMPTY
+                if (currentState === EMPTY) {
+                    board[r][c] = TENT;
+                    sfx.tent();
+                } else if (currentState === TENT) {
+                    board[r][c] = GRASS;
+                    sfx.grass();
+                } else {
+                    board[r][c] = EMPTY;
+                    sfx.click();
+                }
+            }
+
+            renderBoard();
+            checkWinCondition();
+        }
+
+        // Right Click Handler (Quick Grass Toggle)
+        function handleCellRightClick(r, c) {
+            if (!gameActive || board[r][c] === TREE) return;
+
+            sfx.init();
+            saveHistory();
+
+            if (board[r][c] === GRASS) {
+                board[r][c] = EMPTY;
+                sfx.click();
+            } else {
+                board[r][c] = GRASS;
+                sfx.grass();
+            }
+
+            renderBoard();
+            checkWinCondition();
+        }
+
+        // Undo Functionality
+        function saveHistory() {
+            history.push(JSON.parse(JSON.stringify(board)));
+            if (history.length > 30) history.shift();
+        }
+
+        function undo() {
+            if (!gameActive || history.length === 0) return;
+            board = history.pop();
+            sfx.click();
+            renderBoard();
+        }
+
+        // Hint System
+        function giveHint() {
+            if (!gameActive) return;
+
+            sfx.init();
+            sfx.click();
+
+            // Find a discrepancy between player board and solution
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (board[r][c] === TREE) continue;
+
+                    // If player placed tent wrongly
+                    if (board[r][c] === TENT && solution[r][c] !== TENT) {
+                        saveHistory();
+                        board[r][c] = GRASS; // Correct wrong tent to grass
+                        renderBoard();
+                        return;
+                    }
+
+                    // If cell should be tent but player hasn't marked it
+                    if (solution[r][c] === TENT && board[r][c] !== TENT) {
+                        saveHistory();
+                        board[r][c] = TENT;
+                        renderBoard();
+                        checkWinCondition();
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Comprehensive Win Checker
+        function checkWinCondition() {
+            // 1. Check Row & Column Tent Counts
+            for (let r = 0; r < size; r++) {
+                let rCount = 0;
+                for (let c = 0; c < size; c++) if (board[r][c] === TENT) rCount++;
+                if (rCount !== rowCounts[r]) return false;
+            }
+
+            for (let c = 0; c < size; c++) {
+                let cCount = 0;
+                for (let r = 0; r < size; r++) if (board[r][c] === TENT) cCount++;
+                if (cCount !== colCounts[c]) return false;
+            }
+
+            // 2. Check no adjacent tents
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (board[r][c] === TENT) {
+                        if (checkTentConflict(r, c)) return false;
+                    }
+                }
+            }
+
+            // 3. Verify valid 1-to-1 matching between Tents and Trees using Bipartite Matching
+            if (!verifyTreeTentMatching()) return false;
+
+            // All checks passed -> WIN!
+            gameActive = false;
+            clearInterval(timerInterval);
+            sfx.win();
+
+            // Confetti Effect
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 80,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            }
+
+            // Show Victory Modal
+            setTimeout(() => {
+                document.getElementById('victory-time').textContent = document.getElementById('timer-text').textContent;
+                document.getElementById('victory-diff').textContent = `${size}x${size}`;
+                document.getElementById('modal-victory').classList.remove('hidden');
+            }, 300);
+
+            return true;
+        }
+
+        // Matching Verification (Graph Bipartite Matching)
+        function verifyTreeTentMatching() {
+            let trees = [];
+            let tents = [];
+
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (board[r][c] === TREE) trees.push({ r, c, id: trees.length });
+                    if (board[r][c] === TENT) tents.push({ r, c, id: tents.length });
+                }
+            }
+
+            if (trees.length !== tents.length) return false;
+
+            // Build adjacency matrix for tree -> tent
+            let adj = Array.from({ length: trees.length }, () => []);
+            trees.forEach((tree, i) => {
+                tents.forEach((tent, j) => {
+                    const dist = Math.abs(tree.r - tent.r) + Math.abs(tree.c - tent.c);
+                    if (dist === 1) adj[i].push(j);
+                });
+            });
+
+            // Maximum Bipartite Matching (Augmenting path method)
+            let match = Array(tents.length).fill(-1);
+            function dfs(u, visited) {
+                for (let v of adj[u]) {
+                    if (!visited[v]) {
+                        visited[v] = true;
+                        if (match[v] < 0 || dfs(match[v], visited)) {
+                            match[v] = u;
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            let matches = 0;
+            for (let i = 0; i < trees.length; i++) {
+                let visited = Array(tents.length).fill(false);
+                if (dfs(i, visited)) matches++;
+            }
+
+            return matches === trees.length;
+        }
+
+        // Bind UI Elements & Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Difficulty Buttons
+            document.querySelectorAll('.diff-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.diff-btn').forEach(b => {
+                        b.classList.remove('bg-emerald-600', 'text-white', 'shadow-md');
+                        b.classList.add('text-slate-400', 'hover:text-slate-200');
+                    });
+                    e.target.classList.remove('text-slate-400', 'hover:text-slate-200');
+                    e.target.classList.add('bg-emerald-600', 'text-white', 'shadow-md');
+
+                    const newSize = parseInt(e.target.dataset.size);
+                    generatePuzzle(newSize);
+                });
+            });
+
+            // Set default active difficulty button (5x5)
+            const defaultDiff = document.querySelector('.diff-btn[data-size="5"]');
+            if (defaultDiff) {
+                defaultDiff.classList.add('bg-emerald-600', 'text-white', 'shadow-md');
+            }
+
+            // Tools Selection
+            const tools = [
+                { id: 'tool-auto', name: 'auto' },
+                { id: 'tool-tent', name: 'tent' },
+                { id: 'tool-grass', name: 'grass' }
+            ];
+
+            tools.forEach(t => {
+                document.getElementById(t.id).addEventListener('click', () => {
+                    currentTool = t.name;
+                    tools.forEach(o => {
+                        const el = document.getElementById(o.id);
+                        if (o.name === currentTool) {
+                            el.className = 'tool-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-600 text-white shadow-md transition';
+                        } else {
+                            el.className = 'tool-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+                        }
+                    });
+                });
+            });
+
+            // Action Buttons
+            document.getElementById('btn-new').addEventListener('click', () => generatePuzzle(size));
+            document.getElementById('btn-restart').addEventListener('click', () => {
+                if (!gameActive) return;
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        if (board[r][c] !== TREE) board[r][c] = EMPTY;
+                    }
+                }
+                history = [];
+                renderBoard();
+            });
+            document.getElementById('btn-undo').addEventListener('click', undo);
+            document.getElementById('btn-hint').addEventListener('click', giveHint);
+
+            // Modals
+            const modalRules = document.getElementById('modal-rules');
+            document.getElementById('btn-rules').addEventListener('click', () => modalRules.classList.remove('hidden'));
+            document.getElementById('btn-close-rules').addEventListener('click', () => modalRules.classList.add('hidden'));
+            document.getElementById('btn-ack-rules').addEventListener('click', () => modalRules.classList.add('hidden'));
+
+            document.getElementById('btn-next-game').addEventListener('click', () => {
+                document.getElementById('modal-victory').classList.add('hidden');
+                generatePuzzle(size);
+            });
+
+            // Keyboard Shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'z' || e.key === 'Z') {
+                    if (e.ctrlKey || e.metaKey) undo();
+                } else if (e.key === 'h' || e.key === 'H') {
+                    giveHint();
+                }
+            });
+
+            // Start First Game
+            generatePuzzle(5);
+        });
+    </script>
+</body>
+</html>
