@@ -101,7 +101,7 @@
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 my-2">
         <!-- Control Bar (Difficulty & Timer) -->
-        <div class="w-full max-w-md glass-panel p-3 rounded-2xl mb-4 flex items-center justify-between gap-2 shadow-xl">
+        <div class="w-full max-w-md glass-panel p-3 rounded-2xl mb-3 flex items-center justify-between gap-2 shadow-xl">
             <!-- Difficulty Selector -->
             <div class="flex items-center gap-1 bg-slate-950/50 p-1 rounded-xl border border-slate-800">
                 <button class="diff-btn px-2.5 py-1 text-xs font-semibold rounded-lg transition" data-size="5">5x5</button>
@@ -122,6 +122,37 @@
                 新局
             </button>
         </div>
+
+        <!-- Collapsible Rules Panel -->
+        <details class="w-full max-w-md glass-panel rounded-2xl mb-4 text-slate-200 overflow-hidden border border-slate-700/50 group transition-all duration-200">
+            <summary class="p-3 cursor-pointer select-none flex items-center justify-between text-xs sm:text-sm font-semibold hover:bg-slate-800/40 transition">
+                <span class="flex items-center gap-2 text-emerald-400">
+                    <span class="text-base">📖</span> 基础规则指南
+                </span>
+                <span class="text-[10px] sm:text-xs text-slate-400 font-normal flex items-center gap-1 group-open:text-emerald-400 transition">
+                    <span>点击展开 / 收起</span>
+                    <span class="transform group-open:rotate-180 transition-transform duration-200">▼</span>
+                </span>
+            </summary>
+            <div class="px-4 pb-3.5 pt-2 text-xs sm:text-sm text-slate-300 space-y-2 border-t border-slate-800/60 leading-relaxed bg-slate-950/40">
+                <div class="flex items-start gap-2">
+                    <span class="text-emerald-400 font-bold shrink-0">1.</span>
+                    <p><strong class="text-white">一树一帐：</strong>每棵树 (🌲) 的上下左右 4 格内必须且只能搭建 1 个帐篷 (⛺)。</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-emerald-400 font-bold shrink-0">2.</span>
+                    <p><strong class="text-white">保持距离：</strong>任意两个帐篷不可相邻（包含横向、纵向和斜向共 8 格）。</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-emerald-400 font-bold shrink-0">3.</span>
+                    <p><strong class="text-white">行列匹配：</strong>棋盘边缘的数字代表该行或该列必须包含的帐篷总数。</p>
+                </div>
+                <div class="flex items-start gap-2 pt-1 border-t border-slate-800/50">
+                    <span class="text-amber-400 font-bold shrink-0">💡</span>
+                    <p><strong class="text-slate-200">解题小贴士：</strong>善用草地 (🟩) 标记排除确定无帐篷的位置，能大幅提升推理效率！</p>
+                </div>
+            </div>
+        </details>
 
         <!-- Game Board Card -->
         <div class="glass-panel p-3 sm:p-5 rounded-3xl shadow-2xl max-w-md w-full flex flex-col items-center border border-slate-700/50 relative">
