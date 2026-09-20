@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>5 Alive 联机卡牌游戏</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <!-- PeerJS 点对点联机库 -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0b0c10',
+                            cardBg: '#181a24',
+                            pink: '#ff007f',
+                            lime: '#00ff66',
+                            cyan: '#00e5ff',
+                            purple: '#9d4edd',
+                            yellow: '#ffbe0b'
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'card-pop': 'cardPop 0.2s ease-out',
+                        'shake': 'shake 0.4s ease-in-out',
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 15px rgba(0, 255, 102, 0.3)' },
+                            '50%': { boxShadow: '0 0 25px rgba(0, 255, 102, 0.7)' },
+                        },
+                        cardPop: {
+                            '0%': { transform: 'scale(0.8) translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '20%, 60%': { transform: 'translateX(-6px)' },
+                            '40%, 80%': { transform: 'translateX(6px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { touch-action: manipulation; }
+        body {
+            background-color: #0b0c10;
+            background-image: 
+                radial-gradient(circle at 50% 20%, rgba(157, 78, 221, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0, 229, 255, 0.1) 0%, transparent 40%);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .card-shadow { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); }
+        .card-active:active, .card-hover:hover {
+            transform: translateY(-8px) scale(1.05);
+            z-index: 30;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-white h-full max-h-[100dvh] w-screen overflow-hidden flex flex-col justify-between font-sans select-none">
+
+    <!-- 顶栏导航 -->
+    <header class="w-full bg-brand-cardBg/90 backdrop-blur-md border-b border-white/10 px-3 py-2 flex justify-between items-center z-20 shrink-0">
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="bg-gradient-to-r from-brand-pink to-brand-purple text-white font-black text-lg sm:text-2xl tracking-wider px-2.5 py-0.5 rounded-lg italic shadow-md">
+                5 ALIVE
+            </div>
+            <span id="room-badge" class="bg-white/10 text-brand-cyan text-xs font-bold px-2.5 py-1 rounded-full border border-brand-cyan/30 flex items-center gap-1">
+                <i class="fas fa-users text-[10px]"></i> <span id="room-badge-text">单机模式</span>
+            </span>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+            <button id="sound-btn" onclick="toggleSound()" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition text-gray-300 active:scale-95" title="音效控制">
+                <i id="sound-icon" class="fas fa-volume-up text-sm"></i>
+            </button>
+            <button onclick="showLobbyModal()" class="px-2.5 py-1.5 bg-brand-purple/40 hover:bg-brand-purple/60 border border-brand-purple/50 rounded-xl transition text-white text-xs sm:text-sm font-semibold flex items-center active:scale-95">
+                <i class="fas fa-door-open mr-1"></i>大厅/大堂
+            </button>
+            <button onclick="showRulesModal()" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-xl transition text-gray-300 text-xs sm:text-sm font-semibold flex items-center active:scale-95">
+                <i class="fas fa-question-circle mr-1"></i>规则
+            </button>
+        </div>
+    </header>
+
+    <!-- 游戏主竞技场 (支持最大6人) -->
+    <main class="flex-1 w-full max-w-5xl mx-auto px-2 py-1 flex flex-col justify-between relative overflow-hidden">
+
+        <!-- 顶部对手区 (包含 3 个位置: 左上, 正顶, 右上) -->
+        <div class="grid grid-cols-3 gap-2 shrink-0 px-2 pt-1">
+            <div id="slot-container-1" class="flex justify-start"></div>
+            <div id="slot-container-2" class="flex justify-center"></div>
+            <div id="slot-container-3" class="flex justify-end"></div>
+        </div>
+
+        <!-- 中间区域：两侧对手 (左中、右中) + 中央 21 点计分中心 -->
+        <div class="grid grid-cols-12 gap-1 items-center my-auto w-full">
+            
+            <!-- 左中对手 (位置 0) -->
+            <div id="slot-container-0" class="col-span-3 flex justify-start"></div>
+
+            <!-- 中央台面：当前总分仪表盘 -->
+            <div class="col-span-6 flex flex-col items-center justify-center">
+                <div class="relative flex flex-col items-center">
+                    
+                    <!-- 累计分数仪表盘 -->
+                    <div id="total-dial" class="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-lime flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-pulse-glow">
+                        <span class="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gray-400">当前总和</span>
+                        <span id="current-total" class="text-4xl sm:text-5xl font-black text-white my-0.5 tracking-tight">0</span>
+                        <span class="text-[10px] sm:text-xs text-brand-lime font-semibold">上限: 21</span>
+
+                        <!-- 出牌方向指示 -->
+                        <div id="direction-indicator" class="absolute -bottom-2.5 bg-brand-purple text-white px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-md flex items-center space-x-1">
+                            <i id="direction-icon" class="fas fa-redo"></i>
+                            <span id="direction-text">顺时针</span>
+                        </div>
+                    </div>
+
+                    <!-- 动态提示消息栏 -->
+                    <div id="game-message" class="mt-4 text-xs sm:text-sm font-bold text-center text-brand-cyan min-h-[28px] bg-black/60 px-3.5 py-1 rounded-full border border-white/10 max-w-xs truncate">
+                        请在联机大厅开启游戏！
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右中对手 (位置 4) -->
+            <div id="slot-container-4" class="col-span-3 flex justify-end"></div>
+
+        </div>
+
+        <!-- 底部：玩家本人控制区 (位置 5/当前人类视角) -->
+        <div class="shrink-0 w-full flex flex-col items-center pb-1">
+            
+            <!-- 本人玩家状态栏 -->
+            <div id="my-player-bar" class="w-full max-w-md bg-brand-cardBg/90 border border-white/10 rounded-lg px-3 py-1 mb-1.5 flex items-center justify-between shadow-md">
+                <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded-full bg-brand-lime/20 border border-brand-lime flex items-center justify-center font-black text-brand-lime text-xs">
+                        我
+                    </div>
+                    <span id="my-player-name" class="font-bold text-xs text-white">玩家 (你)</span>
+                    <div id="my-lives" class="flex space-x-0.5 ml-1"></div>
+                </div>
+                <span id="my-card-count" class="text-[11px] font-semibold text-brand-cyan bg-brand-cyan/10 px-2 py-0.5 rounded">
+                    手牌: 0
+                </span>
+            </div>
+
+            <!-- 玩家手牌区 -->
+            <div id="human-hand" class="w-full flex justify-start sm:justify-center items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-2 px-1 min-h-[110px] sm:min-h-[130px]">
+                <div class="text-xs text-gray-500">大厅设置完成后点击开始游戏</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 房间/联机大厅弹窗 -->
+    <div id="lobby-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-lg w-full p-5 text-left shadow-2xl relative">
+            <h2 class="text-xl font-extrabold text-brand-lime mb-2 flex items-center justify-between">
+                <span><i class="fas fa-gamepad mr-2"></i>游戏大厅 (最多6人)</span>
+                <button onclick="hideLobbyModal()" class="text-gray-400 hover:text-white text-base">
+                    <i class="fas fa-times"></i>
+                </button>
+            </h2>
+
+            <!-- 模式选择卡片 -->
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button id="mode-offline-btn" onclick="switchLobbyMode('offline')" class="p-3 rounded-xl border border-brand-lime/50 bg-brand-lime/10 text-left transition hover:bg-brand-lime/20">
+                    <div class="font-black text-sm text-brand-lime"><i class="fas fa-desktop mr-1"></i> 单机人机对战</div>
+                    <div class="text-[10px] text-gray-300 mt-1">自己与 AI 电脑玩家快速开局</div>
+                </button>
+                <button id="mode-online-btn" onclick="switchLobbyMode('online')" class="p-3 rounded-xl border border-white/10 bg-white/5 text-left transition hover:bg-white/10">
+                    <div class="font-black text-sm text-brand-cyan"><i class="fas fa-wifi mr-1"></i> 多人连线对战</div>
+                    <div class="text-[10px] text-gray-300 mt-1">和朋友输入房间码在线对战</div>
+                </button>
+            </div>
+
+            <!-- 联机房间选项面板 (在线模式下显示) -->
+            <div id="online-panel" class="hidden bg-black/40 p-3 rounded-xl border border-white/10 mb-4 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <button onclick="createOnlineRoom()" class="flex-1 py-2 bg-gradient-to-r from-brand-cyan to-blue-600 text-black font-extrabold rounded-lg text-xs hover:brightness-110 active:scale-95 transition">
+                        <i class="fas fa-plus-circle mr-1"></i>创建新房间
+                    </button>
+                    <span class="text-xs text-gray-500 font-bold">或</span>
+                    <div class="flex-1 flex gap-1">
+                        <input id="join-room-input" type="text" maxlength="4" placeholder="4位房间码" class="w-full bg-black/60 border border-white/20 rounded-lg px-2 text-xs font-mono text-center uppercase tracking-widest focus:outline-none focus:border-brand-cyan">
+                        <button onclick="joinOnlineRoom()" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition active:scale-95">
+                            加入
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 房间码展示 -->
+                <div id="room-info-box" class="hidden flex items-center justify-between bg-brand-cyan/10 border border-brand-cyan/30 px-3 py-1.5 rounded-lg">
+                    <span class="text-xs text-brand-cyan">房间码: <strong id="current-room-code" class="text-sm tracking-widest text-white ml-1">----</strong></span>
+                    <button onclick="copyRoomCode()" class="text-[11px] bg-brand-cyan/20 hover:bg-brand-cyan/40 text-brand-cyan font-bold px-2 py-0.5 rounded transition">
+                        <i class="fas fa-copy mr-1"></i>复制
+                    </button>
+                </div>
+            </div>
+
+            <!-- 玩家与 AI 数量设置选项 -->
+            <div class="space-y-3 mb-5">
+                <div class="flex justify-between items-center bg-black/30 px-3 py-2 rounded-xl border border-white/5">
+                    <div>
+                        <div class="text-xs font-bold text-white">你的玩家名称</div>
+                        <div class="text-[10px] text-gray-400">在房间中展示的名字</div>
+                    </div>
+                    <input id="player-name-input" type="text" value="玩家" class="bg-black/60 border border-white/20 rounded-lg px-2 py-1 text-xs text-white text-right w-28 focus:outline-none focus:border-brand-lime">
+                </div>
+
+                <div class="flex justify-between items-center bg-black/30 px-3 py-2 rounded-xl border border-white/5">
+                    <div>
+                        <div class="text-xs font-bold text-white">电脑 AI 数量 (0 ~ 5人)</div>
+                        <div id="ai-hint" class="text-[10px] text-gray-400">总玩家数上限为 6 人</div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="ai-minus-btn" onclick="changeAICount(-1)" class="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm flex items-center justify-center">-</button>
+                        <span id="ai-count-display" class="font-black text-brand-lime text-base w-6 text-center">3</span>
+                        <button id="ai-plus-btn" onclick="changeAICount(1)" class="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm flex items-center justify-center">+</button>
+                    </div>
+                </div>
+
+                <!-- 当前房间玩家成员列表 -->
+                <div class="bg-black/40 p-3 rounded-xl border border-white/10">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-extrabold text-gray-300">已就绪玩家 (<span id="total-player-count">4</span>/6):</span>
+                        <span id="host-badge" class="text-[10px] bg-brand-yellow/20 text-brand-yellow border border-brand-yellow/30 px-2 py-0.5 rounded font-bold">房主</span>
+                    </div>
+                    <div id="lobby-player-list" class="grid grid-cols-2 gap-1.5 text-xs">
+                        <!-- 由 JS 动态渲染 -->
+                    </div>
+                </div>
+            </div>
+
+            <button id="start-game-btn" onclick="startGameFromLobby()" class="w-full py-3 bg-gradient-to-r from-brand-lime to-emerald-400 text-black font-black rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition text-sm">
+                开始游戏 (START GAME)
+            </button>
+        </div>
+    </div>
+
+    <!-- 规则说明弹窗 -->
+    <div id="rules-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-md w-full p-5 text-left shadow-2xl relative">
+            <button onclick="hideRulesModal()" class="absolute top-3 right-3 text-gray-400 hover:text-white text-lg p-2">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2 class="text-xl font-extrabold text-brand-lime mb-3 flex items-center">
+                <i class="fas fa-book-open mr-2"></i> 规则说明 (5 Alive)
+            </h2>
+            <div class="space-y-2.5 text-xs sm:text-sm text-gray-300 max-h-[55vh] overflow-y-auto pr-1">
+                <p><strong class="text-white">1. 人数与目标：</strong> 支持 2~6 名玩家（含 AI）。保持中央累计点数<strong class="text-brand-pink">不超过 21 点</strong>！</p>
+                <p><strong class="text-white">2. 扣血机制：</strong> 每人拥有 <strong class="text-brand-lime">5 条命</strong>。打出的牌使总数突破 21 时，该玩家<strong class="text-red-400">扣除 1 条命</strong>并重置回合。</p>
+                <p><strong class="text-white">3. 清空手牌：</strong> 若有玩家率先打光所有手牌，回合结束，<strong class="text-red-400">其他所有玩家各扣 1 条命</strong>！</p>
+                <p><strong class="text-white">4. 特殊功能牌：</strong></p>
+                <ul class="list-disc list-inside space-y-1 pl-1 text-xs text-gray-300">
+                    <li><span class="text-brand-cyan font-bold">= 0</span>: 当前累计点数重置为 0</li>
+                    <li><span class="text-brand-pink font-bold">= 21</span>: 当前点数拉满至 21</li>
+                    <li><span class="text-brand-yellow font-bold">SKIP</span>: 跳过下一位玩家的回合</li>
+                    <li><span class="text-brand-purple font-bold">REV</span>: 反转出牌顺序</li>
+                    <li><span class="text-emerald-400 font-bold">+1 / +2</span>: 强制下一位玩家抽 1 或 2 张牌</li>
+                </ul>
+            </div>
+            <button onclick="hideRulesModal()" class="mt-4 w-full py-2.5 bg-brand-lime text-black font-extrabold rounded-xl shadow-md hover:brightness-110 active:scale-95 transition text-sm">
+                理解规则！
+            </button>
+        </div>
+    </div>
+
+    <!-- 游戏结算弹窗 -->
+    <div id="game-over-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <div id="winner-icon" class="text-5xl mb-2 text-brand-yellow animate-bounce">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h2 id="winner-title" class="text-2xl font-black text-white mb-2">游戏结束</h2>
+            <p id="winner-desc" class="text-xs sm:text-sm text-gray-300 mb-5">胜者诞生！</p>
+            <button onclick="showLobbyModal(); hideGameOverModal();" class="w-full py-3 bg-gradient-to-r from-brand-lime to-emerald-400 text-black font-black rounded-xl shadow-lg active:scale-95 transition">
+                返回大厅再来一局
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API 音效引擎
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) audioCtx = new AudioContext();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                const now = audioCtx.currentTime;
+
+                if (type === 'playCard') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(350, now);
+                    osc.frequency.exponentialRampToValueAtTime(700, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'bust') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.linearRampToValueAtTime(90, now + 0.35);
+                    gain.gain.setValueAtTime(0.4, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'win') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.setValueAtTime(659, now + 0.1);
+                    osc.frequency.setValueAtTime(783, now + 0.2);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                }
+            } catch (e) {
+                console.log("Audio error:", e);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('sound-icon');
+            icon.className = soundEnabled ? 'fas fa-volume-up text-sm text-brand-lime' : 'fas fa-volume-mute text-sm text-gray-500';
+        }
+
+        // 游戏状态定义
+        let currentMode = 'offline'; // 'offline' 或 'online'
+        let isHost = true;
+        let peer = null;
+        let roomCode = '';
+        let connections = []; // 房主保存的所有网络连接
+
+        let aiCount = 3; // 默认 3 个 AI
+        let myPlayerIndex = 0;
+
+        // 全局玩家列表（最多6个元素）
+        // { id, name, isAI, isSelf, peerId, lives, hand: [] }
+        let players = [];
+        let deck = [];
+        let runningTotal = 0;
+        let currentTurn = 0;
+        let playDirection = 1; // 1: 顺时针, -1: 逆时针
+        let isProcessing = false;
+
+        // 生成 5 Alive 标准牌堆
+        function generateDeck() {
+            let newDeck = [];
+            for (let num = 0; num <= 7; num++) {
+                for (let i = 0; i < 6; i++) {
+                    newDeck.push({ type: 'NUMBER', value: num, label: `${num}`, color: 'bg-gradient-to-br from-slate-800 to-slate-900 border-gray-600 text-white' });
+                }
+            }
+            for (let i = 0; i < 5; i++) newDeck.push({ type: 'SET_ZERO', value: 0, label: '=0', color: 'bg-gradient-to-br from-cyan-600 to-blue-800 border-cyan-400 text-cyan-200' });
+            for (let i = 0; i < 4; i++) newDeck.push({ type: 'SET_21', value: 21, label: '=21', color: 'bg-gradient-to-br from-pink-600 to-rose-900 border-pink-400 text-pink-100' });
+            for (let i = 0; i < 5; i++) newDeck.push({ type: 'SKIP', value: 0, label: 'SKIP', icon: 'fa-ban', color: 'bg-gradient-to-br from-amber-600 to-yellow-800 border-yellow-400 text-amber-200' });
+            for (let i = 0; i < 5; i++) newDeck.push({ type: 'REVERSE', value: 0, label: 'REV', icon: 'fa-exchange-alt', color: 'bg-gradient-to-br from-purple-600 to-indigo-900 border-purple-400 text-purple-200' });
+            for (let i = 0; i < 4; i++) newDeck.push({ type: 'DRAW_1', value: 0, label: '+1', icon: 'fa-plus', color: 'bg-gradient-to-br from-emerald-600 to-teal-800 border-emerald-400 text-emerald-200' });
+            for (let i = 0; i < 3; i++) newDeck.push({ type: 'DRAW_2', value: 0, label: '+2', icon: 'fa-plus-circle', color: 'bg-gradient-to-br from-emerald-700 to-green-950 border-emerald-300 text-emerald-100' });
+
+            for (let i = newDeck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
+            }
+            return newDeck;
+        }
+
+        function switchLobbyMode(mode) {
+            currentMode = mode;
+            const offlineBtn = document.getElementById('mode-offline-btn');
+            const onlineBtn = document.getElementById('mode-online-btn');
+            const onlinePanel = document.getElementById('online-panel');
+
+            if (mode === 'offline') {
+                offlineBtn.className = 'p-3 rounded-xl border border-brand-lime/50 bg-brand-lime/10 text-left transition hover:bg-brand-lime/20';
+                onlineBtn.className = 'p-3 rounded-xl border border-white/10 bg-white/5 text-left transition hover:bg-white/10';
+                onlinePanel.classList.add('hidden');
+                isHost = true;
+                document.getElementById('room-badge-text').innerText = '单机模式';
+            } else {
+                onlineBtn.className = 'p-3 rounded-xl border border-brand-cyan/50 bg-brand-cyan/10 text-left transition hover:bg-brand-cyan/20';
+                offlineBtn.className = 'p-3 rounded-xl border border-white/10 bg-white/5 text-left transition hover:bg-white/10';
+                onlinePanel.classList.remove('hidden');
+                document.getElementById('room-badge-text').innerText = roomCode ? `房间: ${roomCode}` : '多人模式';
+            }
+            updateLobbyPlayerList();
+        }
+
+        function changeAICount(delta) {
+            if (!isHost) return;
+            const humanCount = players.filter(p => !p.isAI).length || 1;
+            const maxAI = 6 - humanCount;
+            aiCount = Math.max(0, Math.min(maxAI, aiCount + delta));
+            document.getElementById('ai-count-display').innerText = aiCount;
+            updateLobbyPlayerList();
+        }
+
+        function updateLobbyPlayerList() {
+            const nameInput = document.getElementById('player-name-input').value.trim() || '玩家';
+            let listHtml = '';
+            let currentPlayers = [];
+
+            if (currentMode === 'offline') {
+                currentPlayers.push({ name: nameInput + ' (你)', isAI: false, isSelf: true });
+                for (let i = 1; i <= aiCount; i++) {
+                    currentPlayers.push({ name: `AI 电脑 ${i}`, isAI: true, isSelf: false });
+                }
+            } else {
+                // 多人联机模式
+                players.forEach(p => {
+                    currentPlayers.push({ name: p.name, isAI: p.isAI, isSelf: p.id === myPlayerIndex });
+                });
+                for (let i = 1; i <= aiCount; i++) {
+                    currentPlayers.push({ name: `AI 电脑 ${i}`, isAI: true, isSelf: false });
+                }
+            }
+
+            currentPlayers.forEach((p, idx) => {
+                listHtml += `
+                    <div class="bg-white/5 p-2 rounded-lg flex items-center justify-between border border-white/5">
+                        <span class="font-bold text-white truncate max-w-[110px]">${p.name}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded ${p.isAI ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30'}">
+                            ${p.isAI ? 'AI 电脑' : '真人玩家'}
+                        </span>
+                    </div>
+                `;
+            });
+
+            document.getElementById('lobby-player-list').innerHTML = listHtml;
+            document.getElementById('total-player-count').innerText = currentPlayers.length;
+            document.getElementById('start-game-btn').disabled = currentPlayers.length < 2;
+        }
+
+        function createOnlineRoom() {
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            roomCode = code;
+            isHost = true;
+
+            const name = document.getElementById('player-name-input').value.trim() || '房主';
+            players = [{ id: 0, name: name, isAI: false, peerId: 'host', lives: 5, hand: [] }];
+            myPlayerIndex = 0;
+
+            if (peer) peer.destroy();
+            peer = new Peer('5alive-' + code);
+
+            peer.on('open', (id) => {
+                document.getElementById('room-info-box').classList.remove('hidden');
+                document.getElementById('current-room-code').innerText = code;
+                document.getElementById('room-badge-text').innerText = `房间: ${code}`;
+                updateLobbyPlayerList();
+            });
+
+            peer.on('connection', (conn) => {
+                connections.push(conn);
+                conn.on('data', (data) => handleHostReceiveData(data, conn));
+                conn.on('close', () => {
+                    connections = connections.filter(c => c !== conn);
+                    players = players.filter(p => p.peerId !== conn.peer);
+                    updateLobbyPlayerList();
+                    broadcastState();
+                });
+            });
+        }
+
+        function joinOnlineRoom() {
+            const inputCode = document.getElementById('join-room-input').value.trim();
+            if (inputCode.length !== 4) {
+                alert('请输入 4 位有效房间码！');
+                return;
+            }
+
+            isHost = false;
+            roomCode = inputCode;
+            if (peer) peer.destroy();
+            peer = new Peer();
+
+            peer.on('open', (id) => {
+                const conn = peer.connect('5alive-' + inputCode);
+                const name = document.getElementById('player-name-input').value.trim() || '玩家';
+
+                conn.on('open', () => {
+                    conn.send({ type: 'JOIN', name: name });
+                    document.getElementById('room-info-box').classList.remove('hidden');
+                    document.getElementById('current-room-code').innerText = inputCode;
+                    document.getElementById('room-badge-text').innerText = `房间: ${inputCode}`;
+                    document.getElementById('host-badge').classList.add('hidden');
+                    document.getElementById('ai-minus-btn').disabled = true;
+                    document.getElementById('ai-plus-btn').disabled = true;
+                });
+
+                conn.on('data', (data) => handleClientReceiveData(data));
+            });
+        }
+
+        function copyRoomCode() {
+            if (!roomCode) return;
+            const tempInput = document.createElement('input');
+            tempInput.value = roomCode;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            alert(`房间码 ${roomCode} 已复制到剪贴板！`);
+        }
+
+        function handleHostReceiveData(data, conn) {
+            if (data.type === 'JOIN') {
+                if (players.length + aiCount >= 6) {
+                    conn.send({ type: 'ERROR', message: '房间人数已满（上限6人）' });
+                    return;
+                }
+                const newIdx = players.length;
+                players.push({ id: newIdx, name: data.name, isAI: false, peerId: conn.peer, lives: 5, hand: [] });
+                conn.send({ type: 'INIT_JOIN', playerIndex: newIdx });
+                updateLobbyPlayerList();
+                broadcastLobbyState();
+            } else if (data.type === 'PLAY_CARD') {
+                if (currentTurn === data.playerIdx && !isProcessing) {
+                    executeCardPlay(data.playerIdx, players[data.playerIdx].hand[data.cardIndex], data.cardIndex);
+                }
+            }
+        }
+
+        function handleClientReceiveData(data) {
+            if (data.type === 'INIT_JOIN') {
+                myPlayerIndex = data.playerIndex;
+            } else if (data.type === 'LOBBY_STATE') {
+                players = data.players;
+                aiCount = data.aiCount;
+                updateLobbyPlayerList();
+            } else if (data.type === 'GAME_STATE') {
+                players = data.players;
+                runningTotal = data.runningTotal;
+                currentTurn = data.currentTurn;
+                playDirection = data.playDirection;
+                setMessage(data.message);
+                updateUI();
+                hideLobbyModal();
+            }
+        }
+
+        function broadcastLobbyState() {
+            if (!isHost) return;
+            connections.forEach(conn => {
+                conn.send({ type: 'LOBBY_STATE', players: players, aiCount: aiCount });
+            });
+        }
+
+        function broadcastState(msg = "") {
+            if (!isHost) return;
+            connections.forEach(conn => {
+                conn.send({
+                    type: 'GAME_STATE',
+                    players: players,
+                    runningTotal: runningTotal,
+                    currentTurn: currentTurn,
+                    playDirection: playDirection,
+                    message: msg || document.getElementById('game-message').innerText
+                });
+            });
+        }
+
+        function startGameFromLobby() {
+            const myName = document.getElementById('player-name-input').value.trim() || '玩家';
+
+            if (currentMode === 'offline') {
+                players = [{ id: 0, name: myName + ' (你)', isAI: false, lives: 5, hand: [] }];
+                for (let i = 1; i <= aiCount; i++) {
+                    players.push({ id: i, name: `AI 电脑 ${i}`, isAI: true, lives: 5, hand: [] });
+                }
+                myPlayerIndex = 0;
+            } else if (isHost) {
+                // 补充 AI 到全场
+                const currentHumanCount = players.length;
+                for (let i = 0; i < aiCount; i++) {
+                    const aiIdx = currentHumanCount + i;
+                    players.push({ id: aiIdx, name: `AI 电脑 ${i + 1}`, isAI: true, lives: 5, hand: [] });
+                }
+            }
+
+            hideLobbyModal();
+            initGame();
+        }
+
+        function initGame() {
+            players.forEach(p => { p.lives = 5; p.hand = []; });
+            currentTurn = 0;
+            playDirection = 1;
+            startRound("游戏开始！各玩家发 10 张手牌。");
+        }
+
+        function startRound(msg = "新一轮开始！") {
+            if (!isHost) return;
+            deck = generateDeck();
+            runningTotal = 0;
+
+            players.forEach(p => {
+                p.hand = [];
+                if (p.lives > 0) {
+                    for (let i = 0; i < 10; i++) {
+                        if (deck.length > 0) p.hand.push(deck.pop());
+                    }
+                }
+            });
+
+            if (players[currentTurn].lives <= 0) {
+                currentTurn = getNextActivePlayerIndex(currentTurn, 1);
+            }
+
+            isProcessing = false;
+            setMessage(msg);
+            updateUI();
+            broadcastState(msg);
+
+            if (players[currentTurn].isAI) {
+                setTimeout(triggerAITurn, 1000);
+            }
+        }
+
+        function handleHumanPlayCard(cardIndex) {
+            initAudio();
+            if (currentTurn !== myPlayerIndex || isProcessing) return;
+            if (players[myPlayerIndex].lives <= 0) return;
+
+            if (isHost) {
+                const card = players[myPlayerIndex].hand[cardIndex];
+                executeCardPlay(myPlayerIndex, card, cardIndex);
+            } else {
+                // 发送出牌动作给房主
+                const hostConn = connections[0] || (peer ? peer.connections[Object.keys(peer.connections)[0]]?.[0] : null);
+                if (hostConn) {
+                    hostConn.send({ type: 'PLAY_CARD', playerIdx: myPlayerIndex, cardIndex: cardIndex });
+                }
+            }
+        }
+
+        function executeCardPlay(playerIdx, card, cardIndex) {
+            isProcessing = true;
+            playSound('playCard');
+
+            const player = players[playerIdx];
+            player.hand.splice(cardIndex, 1);
+
+            let effectText = "";
+            let newTotal = runningTotal;
+
+            if (card.type === 'NUMBER') {
+                newTotal += card.value;
+                effectText = `${player.name} 打出了 ${card.value} 点 (总和: ${newTotal})`;
+            } else if (card.type === 'SET_ZERO') {
+                newTotal = 0;
+                effectText = `${player.name} 打出 =0，总数重置为 0！`;
+            } else if (card.type === 'SET_21') {
+                newTotal = 21;
+                effectText = `${player.name} 打出 =21，总数提升至 21 点！`;
+            } else if (card.type === 'SKIP') {
+                effectText = `${player.name} 打出 SKIP，跳过下一位！`;
+            } else if (card.type === 'REVERSE') {
+                playDirection *= -1;
+                effectText = `${player.name} 打出 REV，反转出牌顺序！`;
+            } else if (card.type === 'DRAW_1') {
+                effectText = `${player.name} 打出 +1！`;
+            } else if (card.type === 'DRAW_2') {
+                effectText = `${player.name} 打出 +2！`;
+            }
+
+            runningTotal = newTotal;
+            setMessage(effectText);
+            updateUI();
+            broadcastState(effectText);
+
+            // 1. 判断爆牌 (> 21 点)
+            if (runningTotal > 21) {
+                setTimeout(() => {
+                    playSound('bust');
+                    player.lives--;
+                    const bustMsg = `💥 爆牌！${player.name} 使点数突破 21 (${runningTotal})，扣除 1 条命！`;
+                    setMessage(bustMsg);
+                    updateUI();
+                    broadcastState(bustMsg);
+
+                    const dial = document.getElementById('total-dial');
+                    dial.classList.add('animate-shake');
+                    setTimeout(() => dial.classList.remove('animate-shake'), 400);
+
+                    if (checkGameOver()) return;
+
+                    setTimeout(() => {
+                        startRound(`${player.name} 爆牌重置！重新发牌。`);
+                        isProcessing = false;
+                    }, 2000);
+                }, 400);
+                return;
+            }
+
+            // 2. 判断手牌清空获胜
+            if (player.hand.length === 0) {
+                setTimeout(() => {
+                    playSound('win');
+                    const winMsg = `🎉 ${player.name} 清空了所有手牌！赢下本回合！`;
+                    setMessage(winMsg);
+
+                    players.forEach(p => {
+                        if (p.id !== playerIdx && p.lives > 0) p.lives--;
+                    });
+                    updateUI();
+                    broadcastState(winMsg);
+
+                    if (checkGameOver()) return;
+
+                    setTimeout(() => {
+                        startRound(`${player.name} 先出完手牌，其他玩家各扣 1 条命。`);
+                        isProcessing = false;
+                    }, 2200);
+                }, 400);
+                return;
+            }
+
+            // 3. 计算下一个行动者
+            let step = (card.type === 'SKIP') ? 2 : 1;
+            let nextPlayerIdx = getNextActivePlayerIndex(currentTurn, step * playDirection);
+
+            // 强制加牌功能
+            if (card.type === 'DRAW_1' || card.type === 'DRAW_2') {
+                const count = card.type === 'DRAW_1' ? 1 : 2;
+                const targetPlayer = players[nextPlayerIdx];
+                for (let i = 0; i < count; i++) {
+                    if (deck.length > 0) targetPlayer.hand.push(deck.pop());
+                }
+                const drawMsg = `${player.name} 强制 ${targetPlayer.name} 抽了 ${count} 张牌！`;
+                setMessage(drawMsg);
+            }
+
+            currentTurn = nextPlayerIdx;
+            updateUI();
+            broadcastState();
+
+            setTimeout(() => {
+                isProcessing = false;
+                updateUI();
+                if (players[currentTurn].isAI && isHost) {
+                    triggerAITurn();
+                }
+            }, 800);
+        }
+
+        function triggerAITurn() {
+            if (players[currentTurn].lives <= 0 || !players[currentTurn].isAI || !isHost) return;
+
+            const ai = players[currentTurn];
+            if (ai.hand.length === 0) return;
+
+            let safeCards = [];
+            ai.hand.forEach((card, index) => {
+                let projectTotal = runningTotal;
+                if (card.type === 'NUMBER') projectTotal += card.value;
+                else if (card.type === 'SET_ZERO') projectTotal = 0;
+                else if (card.type === 'SET_21') projectTotal = 21;
+
+                if (projectTotal <= 21) {
+                    safeCards.push({ card, index, projectTotal });
+                }
+            });
+
+            let chosenIndex = 0;
+            if (safeCards.length > 0) {
+                if (runningTotal >= 17) {
+                    let zeroCard = safeCards.find(c => c.card.type === 'SET_ZERO');
+                    if (zeroCard) chosenIndex = zeroCard.index;
+                    else {
+                        safeCards.sort((a, b) => a.card.value - b.card.value);
+                        chosenIndex = safeCards[0].index;
+                    }
+                } else {
+                    safeCards.sort((a, b) => b.card.value - a.card.value);
+                    chosenIndex = safeCards[0].index;
+                }
+            } else {
+                chosenIndex = Math.floor(Math.random() * ai.hand.length);
+            }
+
+            executeCardPlay(ai.id, ai.hand[chosenIndex], chosenIndex);
+        }
+
+        function getNextActivePlayerIndex(fromIdx, offset) {
+            let num = players.length;
+            let curr = fromIdx;
+            let steps = Math.abs(offset);
+            let dir = Math.sign(offset);
+
+            while (steps > 0) {
+                curr = (curr + dir + num) % num;
+                if (players[curr].lives > 0) steps--;
+            }
+            return curr;
+        }
+
+        function checkGameOver() {
+            const alive = players.filter(p => p.lives > 0);
+            if (alive.length <= 1) {
+                const winner = alive[0] || players[0];
+                showGameOverModal(winner);
+                return true;
+            }
+            return false;
+        }
+
+        function updateUI() {
+            // 1. 中央总分与色彩渐变
+            const totalEl = document.getElementById('current-total');
+            const dialEl = document.getElementById('total-dial');
+            totalEl.innerText = runningTotal;
+
+            if (runningTotal <= 14) {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-lime flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-pulse-glow";
+            } else if (runningTotal <= 18) {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-yellow flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300";
+            } else {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-pink flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-bounce";
+            }
+
+            // 2. 出牌方向
+            document.getElementById('direction-text').innerText = playDirection === 1 ? "顺时针" : "逆时针";
+            document.getElementById('direction-icon').className = playDirection === 1 ? "fas fa-redo" : "fas fa-undo";
+
+            // 3. 渲染周围最多 5 个对手位置 (以视角为中心排布)
+            renderOpponentSlots();
+
+            // 4. 渲染视角本人控制栏与手牌
+            const me = players[myPlayerIndex];
+            if (me) {
+                document.getElementById('my-player-name').innerText = me.name;
+                document.getElementById('my-card-count').innerText = `手牌: ${me.hand ? me.hand.length : 0}`;
+
+                let livesHtml = '';
+                for (let i = 0; i < 5; i++) {
+                    livesHtml += i < me.lives 
+                        ? `<span class="text-brand-lime text-xs"><i class="fas fa-heart"></i></span>` 
+                        : `<span class="text-gray-600 text-xs"><i class="far fa-heart"></i></span>`;
+                }
+                document.getElementById('my-lives').innerHTML = livesHtml;
+            }
+
+            renderHumanHand();
+        }
+
+        // 将当前玩家视点移至底部，计算并绘制周围对手 Slots (0..4)
+        function renderOpponentSlots() {
+            // 场景 5 个挂载位置 ID
+            const slotContainers = [
+                'slot-container-0', // 左中
+                'slot-container-1', // 左上
+                'slot-container-2', // 正顶
+                'slot-container-3', // 右上
+                'slot-container-4'  // 右中
+            ];
+
+            // 清空所有插槽
+            slotContainers.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
+
+            if (players.length <= 1) return;
+
+            // 相对于 myPlayerIndex 排序其他 5 个对手位置
+            let opponentIndices = [];
+            for (let i = 1; i < players.length; i++) {
+                opponentIndices.push((myPlayerIndex + i) % players.length);
+            }
+
+            // 均分贴合到 5 个插槽
+            const slotsCount = 5;
+            opponentIndices.forEach((playerIdx, arrayPos) => {
+                // 算法：将实际对手均匀映射到 5 个视觉槽位上
+                let targetSlotIdx = Math.floor((arrayPos / opponentIndices.length) * slotsCount);
+                if (targetSlotIdx >= slotsCount) targetSlotIdx = slotsCount - 1;
+
+                const p = players[playerIdx];
+                const container = document.getElementById(slotContainers[targetSlotIdx]);
+                if (!container || !p) return;
+
+                const isTurn = currentTurn === playerIdx && p.lives > 0;
+                
+                let livesHtml = '';
+                for (let i = 0; i < 5; i++) {
+                    livesHtml += i < p.lives 
+                        ? `<span class="text-brand-lime text-[10px]"><i class="fas fa-heart"></i></span>` 
+                        : `<span class="text-gray-600 text-[10px]"><i class="far fa-heart"></i></span>`;
+                }
+
+                container.innerHTML = `
+                    <div class="bg-brand-cardBg/80 border ${isTurn ? 'border-brand-lime shadow-lg shadow-brand-lime/20' : 'border-white/10'} ${p.lives <= 0 ? 'opacity-40 grayscale' : ''} rounded-xl px-2.5 py-1 flex items-center space-x-2 transition-all duration-300">
+                        <div class="relative">
+                            <div class="w-7 h-7 rounded-full ${p.isAI ? 'bg-purple-600/30 border-purple-400 text-purple-300' : 'bg-cyan-600/30 border-cyan-400 text-cyan-300'} border flex items-center justify-center font-bold text-xs">
+                                <i class="fas ${p.isAI ? 'fa-robot' : 'fa-user'}"></i>
+                            </div>
+                            ${isTurn ? '<span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-brand-lime rounded-full animate-ping"></span>' : ''}
+                        </div>
+                        <div class="text-left">
+                            <div class="flex items-center space-x-1.5">
+                                <span class="font-bold text-[11px] truncate max-w-[70px]">${p.name}</span>
+                                <span class="text-[9px] bg-white/10 px-1 py-0.2 rounded text-gray-300">${p.hand ? p.hand.length : 0}张</span>
+                            </div>
+                            <div class="flex space-x-0.5 mt-0.5">${livesHtml}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderHumanHand() {
+            const handContainer = document.getElementById('human-hand');
+            handContainer.innerHTML = '';
+
+            const me = players[myPlayerIndex];
+            if (!me) return;
+
+            if (me.lives <= 0) {
+                handContainer.innerHTML = `<span class="text-red-400 font-bold text-xs">你已被淘汰出局</span>`;
+                return;
+            }
+
+            const isMyTurn = currentTurn === myPlayerIndex && !isProcessing;
+
+            if (!me.hand || me.hand.length === 0) {
+                handContainer.innerHTML = `<span class="text-gray-400 text-xs">暂无手牌</span>`;
+                return;
+            }
+
+            me.hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `
+                    relative flex-shrink-0 w-12 h-18 sm:w-16 sm:h-24 rounded-lg p-1.5 flex flex-col justify-between items-center 
+                    border cursor-pointer transition-all duration-150 card-shadow card-active animate-card-pop ${card.color}
+                    ${isMyTurn ? 'hover:border-white' : 'opacity-70 cursor-not-allowed'}
+                `;
+
+                let innerIcon = card.icon ? `<i class="fas ${card.icon} text-sm sm:text-lg my-auto"></i>` : `<span class="text-lg sm:text-2xl font-black my-auto">${card.label}</span>`;
+
+                cardDiv.innerHTML = `
+                    <div class="w-full text-left font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                    ${innerIcon}
+                    <div class="w-full text-right font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                `;
+
+                if (isMyTurn) {
+                    cardDiv.onclick = () => handleHumanPlayCard(index);
+                }
+
+                handContainer.appendChild(cardDiv);
+            });
+        }
+
+        function setMessage(msg) {
+            document.getElementById('game-message').innerText = msg;
+        }
+
+        function showLobbyModal() {
+            document.getElementById('lobby-modal').classList.remove('hidden');
+            updateLobbyPlayerList();
+        }
+
+        function hideLobbyModal() {
+            document.getElementById('lobby-modal').classList.add('hidden');
+        }
+
+        function showRulesModal() {
+            document.getElementById('rules-modal').classList.remove('hidden');
+        }
+
+        function hideRulesModal() {
+            document.getElementById('rules-modal').classList.add('hidden');
+        }
+
+        function showGameOverModal(winner) {
+            const modal = document.getElementById('game-over-modal');
+            const title = document.getElementById('winner-title');
+            const desc = document.getElementById('winner-desc');
+
+            if (winner.id === myPlayerIndex) {
+                playSound('win');
+                title.innerText = "🏆 最终胜利！";
+                desc.innerText = "恭喜你击败了所有对手！成为最后的赢家！";
+            } else {
+                title.innerText = "💔 游戏结束";
+                desc.innerText = `${winner.name} 获得了最终胜利！`;
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function hideGameOverModal() {
+            document.getElementById('game-over-modal').classList.add('hidden');
+        }
+
+        window.onload = function() {
+            showLobbyModal();
+            updateLobbyPlayerList();
+        };
+    </script>
+</body>
+</html>
