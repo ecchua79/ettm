@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>5 Alive 卡牌游戏</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0b0c10',
+                            cardBg: '#181a24',
+                            pink: '#ff007f',
+                            lime: '#00ff66',
+                            cyan: '#00e5ff',
+                            purple: '#9d4edd',
+                            yellow: '#ffbe0b'
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'card-pop': 'cardPop 0.2s ease-out',
+                        'shake': 'shake 0.4s ease-in-out',
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 15px rgba(0, 255, 102, 0.3)' },
+                            '50%': { boxShadow: '0 0 25px rgba(0, 255, 102, 0.7)' },
+                        },
+                        cardPop: {
+                            '0%': { transform: 'scale(0.8) translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '20%, 60%': { transform: 'translateX(-6px)' },
+                            '40%, 80%': { transform: 'translateX(6px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            touch-action: manipulation;
+        }
+        body {
+            background-color: #0b0c10;
+            background-image: 
+                radial-gradient(circle at 50% 20%, rgba(157, 78, 221, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0, 229, 255, 0.1) 0%, transparent 40%);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .card-shadow {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-active:active, .card-hover:hover {
+            transform: translateY(-8px) scale(1.05);
+            z-index: 30;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-white h-full max-h-[100dvh] w-screen overflow-hidden flex flex-col justify-between font-sans select-none">
+
+    <!-- 顶栏导航 -->
+    <header class="w-full bg-brand-cardBg/90 backdrop-blur-md border-b border-white/10 px-3 py-2 flex justify-between items-center z-20 shrink-0">
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="bg-gradient-to-r from-brand-pink to-brand-purple text-white font-black text-lg sm:text-2xl tracking-wider px-2.5 py-0.5 rounded-lg italic shadow-md">
+                5 ALIVE
+            </div>
+            <span class="hidden sm:inline text-xs text-gray-400 border-l border-white/20 pl-3">保持点数 ≤ 21！</span>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+            <button id="sound-btn" onclick="toggleSound()" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition text-gray-300 active:scale-95" title="切换音效">
+                <i id="sound-icon" class="fas fa-volume-up text-base"></i>
+            </button>
+            <button onclick="showRulesModal()" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-xl transition text-gray-300 text-xs sm:text-sm font-semibold flex items-center active:scale-95">
+                <i class="fas fa-question-circle mr-1"></i>规则
+            </button>
+            <button onclick="restartGame()" class="px-3 py-1.5 bg-gradient-to-r from-brand-lime to-emerald-400 text-black font-extrabold rounded-xl shadow-md hover:brightness-110 active:scale-95 transition text-xs sm:text-sm flex items-center">
+                <i class="fas fa-redo-alt mr-1"></i>新局
+            </button>
+        </div>
+    </header>
+
+    <!-- 游戏主竞技场 -->
+    <main class="flex-1 w-full max-w-4xl mx-auto px-2 py-1 flex flex-col justify-between relative overflow-hidden">
+
+        <!-- 顶部AI对手 (AI 2) -->
+        <div class="flex justify-center shrink-0">
+            <div id="player-2-container" class="bg-brand-cardBg/80 border border-white/10 rounded-xl px-3 py-1.5 flex items-center space-x-3 transition-all duration-300">
+                <div class="relative">
+                    <div class="w-8 h-8 rounded-full bg-purple-600/30 border border-purple-400 flex items-center justify-center font-bold text-purple-300 text-xs">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <span id="p2-turn-badge" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-brand-lime rounded-full animate-ping"></span>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="font-bold text-xs">小智 (AI 2)</span>
+                        <span id="p2-card-count" class="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-300">10张</span>
+                    </div>
+                    <div id="p2-lives" class="flex space-x-0.5 mt-0.5"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中间区域：左AI、右AI 与 中央核心累加计算盘 -->
+        <div class="grid grid-cols-12 gap-1 items-center my-auto w-full">
+            
+            <!-- 左侧AI对手 (AI 1) -->
+            <div class="col-span-3 flex justify-start">
+                <div id="player-1-container" class="bg-brand-cardBg/80 border border-white/10 rounded-xl p-2 flex flex-col items-center transition-all duration-300">
+                    <div class="relative mb-1">
+                        <div class="w-8 h-8 rounded-full bg-cyan-600/30 border border-cyan-400 flex items-center justify-center font-bold text-cyan-300 text-xs">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <span id="p1-turn-badge" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-brand-lime rounded-full animate-ping"></span>
+                    </div>
+                    <div class="text-[11px] font-bold text-center">阿法 (AI 1)</div>
+                    <div id="p1-card-count" class="text-[10px] text-gray-400">10张</div>
+                    <div id="p1-lives" class="flex space-x-0.5 mt-1"></div>
+                </div>
+            </div>
+
+            <!-- 中央台面：当前总分仪表盘 -->
+            <div class="col-span-6 flex flex-col items-center justify-center">
+                <div class="relative flex flex-col items-center">
+                    
+                    <!-- 累计分数仪表盘 -->
+                    <div id="total-dial" class="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-lime flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-pulse-glow">
+                        <span class="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gray-400">当前总和</span>
+                        <span id="current-total" class="text-4xl sm:text-5xl font-black text-white my-0.5 tracking-tight">0</span>
+                        <span class="text-[10px] sm:text-xs text-brand-lime font-semibold">上限: 21</span>
+
+                        <!-- 出牌方向指示 -->
+                        <div id="direction-indicator" class="absolute -bottom-2.5 bg-brand-purple text-white px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-md flex items-center space-x-1">
+                            <i id="direction-icon" class="fas fa-redo"></i>
+                            <span id="direction-text">顺时针</span>
+                        </div>
+                    </div>
+
+                    <!-- 动态提示消息栏 -->
+                    <div id="game-message" class="mt-4 text-xs sm:text-sm font-bold text-center text-brand-cyan min-h-[24px] bg-black/50 px-3 py-1 rounded-full border border-white/10 max-w-xs truncate">
+                        游戏开始！轮到你的回合。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧AI对手 (AI 3) -->
+            <div class="col-span-3 flex justify-end">
+                <div id="player-3-container" class="bg-brand-cardBg/80 border border-white/10 rounded-xl p-2 flex flex-col items-center transition-all duration-300">
+                    <div class="relative mb-1">
+                        <div class="w-8 h-8 rounded-full bg-pink-600/30 border border-pink-400 flex items-center justify-center font-bold text-pink-300 text-xs">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <span id="p3-turn-badge" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-brand-lime rounded-full animate-ping"></span>
+                    </div>
+                    <div class="text-[11px] font-bold text-center">极客 (AI 3)</div>
+                    <div id="p3-card-count" class="text-[10px] text-gray-400">10张</div>
+                    <div id="p3-lives" class="flex space-x-0.5 mt-1"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 底部：人类玩家控制区 -->
+        <div class="shrink-0 w-full flex flex-col items-center pb-1">
+            
+            <!-- 玩家状态提示 -->
+            <div id="player-0-container" class="w-full max-w-md bg-brand-cardBg/90 border border-white/10 rounded-lg px-3 py-1 mb-1.5 flex items-center justify-between shadow-md">
+                <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded-full bg-brand-lime/20 border border-brand-lime flex items-center justify-center font-black text-brand-lime text-xs">
+                        你
+                    </div>
+                    <span class="font-bold text-xs text-white">玩家 (你)</span>
+                    <div id="p0-lives" class="flex space-x-0.5 ml-1"></div>
+                </div>
+                <span id="p0-card-count" class="text-[11px] font-semibold text-brand-cyan bg-brand-cyan/10 px-2 py-0.5 rounded">
+                    手牌: 10
+                </span>
+            </div>
+
+            <!-- 玩家手牌区 (支持横向滑动，适应手机屏幕) -->
+            <div id="human-hand" class="w-full flex justify-start sm:justify-center items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-2 px-1 min-h-[110px] sm:min-h-[130px]">
+                <!-- 手牌由 JS 动态生成 -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 规则说明弹窗 -->
+    <div id="rules-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-md w-full p-5 text-left shadow-2xl relative">
+            <button onclick="hideRulesModal()" class="absolute top-3 right-3 text-gray-400 hover:text-white text-lg p-2">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2 class="text-xl font-extrabold text-brand-lime mb-3 flex items-center">
+                <i class="fas fa-book-open mr-2"></i> 游戏规则 (5 Alive)
+            </h2>
+            <div class="space-y-2.5 text-xs sm:text-sm text-gray-300 max-h-[55vh] overflow-y-auto pr-1">
+                <p><strong class="text-white">1. 核心目标：</strong> 每次出牌后，确保中央累计点数<strong class="text-brand-pink">不超过 21 点</strong>！</p>
+                <p><strong class="text-white">2. 扣血机制：</strong> 每人拥有 <strong class="text-brand-lime">5 条命</strong>。打出的牌使总数突破 21 时，该玩家<strong class="text-red-400">扣除 1 条命</strong>并重置牌局。</p>
+                <p><strong class="text-white">3. 清空手牌：</strong> 若有玩家先清空手牌，回合结束，<strong class="text-red-400">其他所有玩家各扣 1 条命</strong>！</p>
+                <p><strong class="text-white">4. 特殊功能牌：</strong></p>
+                <ul class="list-disc list-inside space-y-1 pl-1 text-xs text-gray-300">
+                    <li><span class="text-brand-cyan font-bold">= 0</span>: 当前累计点数重置为 0</li>
+                    <li><span class="text-brand-pink font-bold">= 21</span>: 当前点数拉满至 21</li>
+                    <li><span class="text-brand-yellow font-bold">SKIP</span>: 跳过下一位玩家的回合</li>
+                    <li><span class="text-brand-purple font-bold">REV</span>: 反转出牌顺序</li>
+                    <li><span class="text-emerald-400 font-bold">+1 / +2</span>: 强制下一位玩家抽 1 或 2 张牌</li>
+                </ul>
+            </div>
+            <button onclick="hideRulesModal()" class="mt-4 w-full py-2.5 bg-brand-lime text-black font-extrabold rounded-xl shadow-md hover:brightness-110 active:scale-95 transition text-sm">
+                理解规则，开启游戏！
+            </button>
+        </div>
+    </div>
+
+    <!-- 游戏结算弹窗 -->
+    <div id="game-over-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <div id="winner-icon" class="text-5xl mb-2 text-brand-yellow animate-bounce">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h2 id="winner-title" class="text-2xl font-black text-white mb-2">游戏结束</h2>
+            <p id="winner-desc" class="text-xs sm:text-sm text-gray-300 mb-5">胜者诞生！</p>
+            <button onclick="restartGame(); hideGameOverModal();" class="w-full py-3 bg-gradient-to-r from-brand-lime to-emerald-400 text-black font-black rounded-xl shadow-lg active:scale-95 transition">
+                再来一局
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API 音效支持
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'playCard') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(350, now);
+                    osc.frequency.exponentialRampToValueAtTime(700, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'bust') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.linearRampToValueAtTime(90, now + 0.35);
+                    gain.gain.setValueAtTime(0.4, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'win') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.setValueAtTime(659, now + 0.1);
+                    osc.frequency.setValueAtTime(783, now + 0.2);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                }
+            } catch (e) {
+                console.log("Sound play error:", e);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('sound-icon');
+            if (soundEnabled) {
+                icon.className = 'fas fa-volume-up text-base text-brand-lime';
+            } else {
+                icon.className = 'fas fa-volume-mute text-base text-gray-500';
+            }
+        }
+
+        // 玩家数据结构
+        let players = [
+            { id: 0, name: '你', isAI: false, lives: 5, hand: [] },
+            { id: 1, name: '阿法 (AI 1)', isAI: true, lives: 5, hand: [] },
+            { id: 2, name: '小智 (AI 2)', isAI: true, lives: 5, hand: [] },
+            { id: 3, name: '极客 (AI 3)', isAI: true, lives: 5, hand: [] }
+        ];
+
+        let deck = [];
+        let runningTotal = 0;
+        let currentTurn = 0; // 0..3
+        let playDirection = 1; // 1: 顺时针, -1: 逆时针
+        let isProcessing = false;
+
+        // 生成标准牌堆
+        function generateDeck() {
+            let newDeck = [];
+            // 数字牌 0~7 各6张
+            for (let num = 0; num <= 7; num++) {
+                for (let i = 0; i < 6; i++) {
+                    newDeck.push({ type: 'NUMBER', value: num, label: `${num}`, color: 'bg-gradient-to-br from-slate-800 to-slate-900 border-gray-600 text-white' });
+                }
+            }
+            // =0 (5张)
+            for (let i = 0; i < 5; i++) {
+                newDeck.push({ type: 'SET_ZERO', value: 0, label: '=0', color: 'bg-gradient-to-br from-cyan-600 to-blue-800 border-cyan-400 text-cyan-200' });
+            }
+            // =21 (4张)
+            for (let i = 0; i < 4; i++) {
+                newDeck.push({ type: 'SET_21', value: 21, label: '=21', color: 'bg-gradient-to-br from-pink-600 to-rose-900 border-pink-400 text-pink-100' });
+            }
+            // SKIP (5张)
+            for (let i = 0; i < 5; i++) {
+                newDeck.push({ type: 'SKIP', value: 0, label: 'SKIP', icon: 'fa-ban', color: 'bg-gradient-to-br from-amber-600 to-yellow-800 border-yellow-400 text-amber-200' });
+            }
+            // REVERSE (5张)
+            for (let i = 0; i < 5; i++) {
+                newDeck.push({ type: 'REVERSE', value: 0, label: 'REV', icon: 'fa-exchange-alt', color: 'bg-gradient-to-br from-purple-600 to-indigo-900 border-purple-400 text-purple-200' });
+            }
+            // +1 (4张)
+            for (let i = 0; i < 4; i++) {
+                newDeck.push({ type: 'DRAW_1', value: 0, label: '+1', icon: 'fa-plus', color: 'bg-gradient-to-br from-emerald-600 to-teal-800 border-emerald-400 text-emerald-200' });
+            }
+            // +2 (3张)
+            for (let i = 0; i < 3; i++) {
+                newDeck.push({ type: 'DRAW_2', value: 0, label: '+2', icon: 'fa-plus-circle', color: 'bg-gradient-to-br from-emerald-700 to-green-950 border-emerald-300 text-emerald-100' });
+            }
+
+            // 洗牌
+            for (let i = newDeck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
+            }
+            return newDeck;
+        }
+
+        // 初始化一局完整游戏
+        function initGame() {
+            players.forEach(p => {
+                p.lives = 5;
+                p.hand = [];
+            });
+            currentTurn = 0;
+            playDirection = 1;
+            startRound("全新对局开始！各自发 10 张手牌。");
+        }
+
+        // 开始新一轮（洗牌发牌，重置分值）
+        function startRound(msg = "新一轮开始！") {
+            deck = generateDeck();
+            runningTotal = 0;
+
+            // 给存活玩家发 10 张牌
+            players.forEach(p => {
+                p.hand = [];
+                if (p.lives > 0) {
+                    for (let i = 0; i < 10; i++) {
+                        if (deck.length > 0) p.hand.push(deck.pop());
+                    }
+                }
+            });
+
+            if (players[currentTurn].lives <= 0) {
+                currentTurn = getNextActivePlayerIndex(currentTurn, 1);
+            }
+
+            isProcessing = false;
+            updateUI();
+            setMessage(msg);
+
+            if (players[currentTurn].isAI) {
+                setTimeout(triggerAITurn, 1000);
+            }
+        }
+
+        // 玩家出牌事件 handler
+        function handleHumanPlayCard(cardIndex) {
+            initAudio(); // 激活 Mobile 音效
+            if (currentTurn !== 0 || isProcessing) return;
+            if (players[0].lives <= 0) return;
+
+            const card = players[0].hand[cardIndex];
+            executeCardPlay(0, card, cardIndex);
+        }
+
+        // 统一处理出牌动作
+        function executeCardPlay(playerIdx, card, cardIndex) {
+            isProcessing = true;
+            playSound('playCard');
+
+            const player = players[playerIdx];
+            player.hand.splice(cardIndex, 1);
+
+            let effectText = "";
+            let newTotal = runningTotal;
+
+            if (card.type === 'NUMBER') {
+                newTotal += card.value;
+                effectText = `${player.name} 打出了 ${card.value} 点 (总和: ${newTotal})`;
+            } else if (card.type === 'SET_ZERO') {
+                newTotal = 0;
+                effectText = `${player.name} 打出 =0，总分重置为 0！`;
+            } else if (card.type === 'SET_21') {
+                newTotal = 21;
+                effectText = `${player.name} 打出 =21，总分升至 21 点！`;
+            } else if (card.type === 'SKIP') {
+                effectText = `${player.name} 打出 SKIP，跳过下一位！`;
+            } else if (card.type === 'REVERSE') {
+                playDirection *= -1;
+                effectText = `${player.name} 打出 REV，改变出牌方向！`;
+            } else if (card.type === 'DRAW_1') {
+                effectText = `${player.name} 打出 +1！`;
+            } else if (card.type === 'DRAW_2') {
+                effectText = `${player.name} 打出 +2！`;
+            }
+
+            runningTotal = newTotal;
+            setMessage(effectText);
+            updateUI();
+
+            // 1. 判断爆牌 (> 21 点)
+            if (runningTotal > 21) {
+                setTimeout(() => {
+                    playSound('bust');
+                    player.lives--;
+                    setMessage(`💥 爆牌！${player.name} 使点数超过 21 (${runningTotal})，扣除 1 条命！`);
+                    updateUI();
+
+                    const dial = document.getElementById('total-dial');
+                    dial.classList.add('animate-shake');
+                    setTimeout(() => dial.classList.remove('animate-shake'), 400);
+
+                    if (checkGameOver()) return;
+
+                    setTimeout(() => {
+                        startRound(`${player.name} 爆牌导致回合重置！重新发牌。`);
+                        isProcessing = false;
+                    }, 2000);
+                }, 400);
+                return;
+            }
+
+            // 2. 判断手牌清空获胜
+            if (player.hand.length === 0) {
+                setTimeout(() => {
+                    playSound('win');
+                    setMessage(`🎉 ${player.name} 清空了所有手牌！赢得本回合！`);
+                    
+                    players.forEach(p => {
+                        if (p.id !== playerIdx && p.lives > 0) {
+                            p.lives--;
+                        }
+                    });
+                    updateUI();
+
+                    if (checkGameOver()) return;
+
+                    setTimeout(() => {
+                        startRound(`${player.name} 先出完手牌，其他玩家各扣 1 条命。`);
+                        isProcessing = false;
+                    }, 2200);
+                }, 400);
+                return;
+            }
+
+            // 3. 计算下一行动玩家
+            let step = (card.type === 'SKIP') ? 2 : 1;
+            let nextPlayerIdx = getNextActivePlayerIndex(currentTurn, step * playDirection);
+
+            // 强制加牌功能
+            if (card.type === 'DRAW_1' || card.type === 'DRAW_2') {
+                const count = card.type === 'DRAW_1' ? 1 : 2;
+                const targetPlayer = players[nextPlayerIdx];
+                for (let i = 0; i < count; i++) {
+                    if (deck.length > 0) targetPlayer.hand.push(deck.pop());
+                }
+                setMessage(`${player.name} 强制 ${targetPlayer.name} 抽了 ${count} 张牌！`);
+            }
+
+            currentTurn = nextPlayerIdx;
+            updateUI();
+
+            // AI思考推进
+            setTimeout(() => {
+                isProcessing = false;
+                updateUI(); // 修复：重置 processing 状态后重新渲染 UI，确保人类玩家手牌恢复可点击状态
+                if (players[currentTurn].isAI) {
+                    triggerAITurn();
+                }
+            }, 800);
+        }
+
+        // AI 智力决策逻辑
+        function triggerAITurn() {
+            if (players[currentTurn].lives <= 0 || !players[currentTurn].isAI) return;
+
+            const ai = players[currentTurn];
+            if (ai.hand.length === 0) return;
+
+            let safeCards = [];
+            ai.hand.forEach((card, index) => {
+                let projectTotal = runningTotal;
+                if (card.type === 'NUMBER') projectTotal += card.value;
+                else if (card.type === 'SET_ZERO') projectTotal = 0;
+                else if (card.type === 'SET_21') projectTotal = 21;
+
+                if (projectTotal <= 21) {
+                    safeCards.push({ card, index, projectTotal });
+                }
+            });
+
+            let chosenIndex = 0;
+            if (safeCards.length > 0) {
+                if (runningTotal >= 17) {
+                    // 点数高时，优先打出 =0 或功能牌，或最小数字牌
+                    let zeroCard = safeCards.find(c => c.card.type === 'SET_ZERO');
+                    if (zeroCard) chosenIndex = zeroCard.index;
+                    else {
+                        safeCards.sort((a, b) => a.card.value - b.card.value);
+                        chosenIndex = safeCards[0].index;
+                    }
+                } else {
+                    // 点数低时优先出大数消耗手牌
+                    safeCards.sort((a, b) => b.card.value - a.card.value);
+                    chosenIndex = safeCards[0].index;
+                }
+            } else {
+                // 必爆牌情况，随机出牌
+                chosenIndex = Math.floor(Math.random() * ai.hand.length);
+            }
+
+            executeCardPlay(ai.id, ai.hand[chosenIndex], chosenIndex);
+        }
+
+        // 获取下一个未被淘汰的玩家
+        function getNextActivePlayerIndex(fromIdx, offset) {
+            let num = players.length;
+            let curr = fromIdx;
+            let steps = Math.abs(offset);
+            let dir = Math.sign(offset);
+
+            while (steps > 0) {
+                curr = (curr + dir + num) % num;
+                if (players[curr].lives > 0) {
+                    steps--;
+                }
+            }
+            return curr;
+        }
+
+        // 检查终局
+        function checkGameOver() {
+            const alive = players.filter(p => p.lives > 0);
+            if (alive.length <= 1) {
+                const winner = alive[0] || players[0];
+                showGameOverModal(winner);
+                return true;
+            }
+            return false;
+        }
+
+        // 界面更新逻辑
+        function updateUI() {
+            // 1. 中央总分与颜色渐变
+            const totalEl = document.getElementById('current-total');
+            const dialEl = document.getElementById('total-dial');
+            totalEl.innerText = runningTotal;
+
+            if (runningTotal <= 14) {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-lime flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-pulse-glow";
+            } else if (runningTotal <= 18) {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-yellow flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300";
+            } else {
+                dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-pink flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-bounce";
+            }
+
+            // 2. 出牌方向
+            document.getElementById('direction-text').innerText = playDirection === 1 ? "顺时针" : "逆时针";
+            document.getElementById('direction-icon').className = playDirection === 1 ? "fas fa-redo" : "fas fa-undo";
+
+            // 3. 玩家面板与生命数
+            players.forEach((p, idx) => {
+                const countEl = document.getElementById(`p${idx}-card-count`);
+                if (countEl) {
+                    countEl.innerText = idx === 0 ? `手牌: ${p.hand.length}` : `${p.hand.length}张`;
+                }
+
+                // 绘制心形生命标记
+                const livesEl = document.getElementById(`p${idx}-lives`);
+                if (livesEl) {
+                    let html = '';
+                    for (let i = 0; i < 5; i++) {
+                        if (i < p.lives) {
+                            html += `<span class="text-brand-lime text-[10px] sm:text-xs"><i class="fas fa-heart"></i></span>`;
+                        } else {
+                            html += `<span class="text-gray-600 text-[10px] sm:text-xs"><i class="far fa-heart"></i></span>`;
+                        }
+                    }
+                    livesEl.innerHTML = html;
+                }
+
+                // 高亮当前回合玩家
+                const container = document.getElementById(`player-${idx}-container`);
+                const badge = document.getElementById(`p${idx}-turn-badge`);
+                if (container) {
+                    if (currentTurn === idx && p.lives > 0) {
+                        container.classList.add('border-brand-lime', 'shadow-md', 'shadow-brand-lime/20');
+                        container.classList.remove('border-white/10');
+                        if (badge) badge.classList.remove('hidden');
+                    } else {
+                        container.classList.remove('border-brand-lime', 'shadow-md', 'shadow-brand-lime/20');
+                        container.classList.add('border-white/10');
+                        if (badge) badge.classList.add('hidden');
+                    }
+
+                    if (p.lives <= 0) {
+                        container.classList.add('opacity-40', 'grayscale');
+                    } else {
+                        container.classList.remove('opacity-40', 'grayscale');
+                    }
+                }
+            });
+
+            // 4. 渲染人类玩家手牌
+            renderHumanHand();
+        }
+
+        // 渲染底部人类手牌
+        function renderHumanHand() {
+            const handContainer = document.getElementById('human-hand');
+            handContainer.innerHTML = '';
+
+            if (players[0].lives <= 0) {
+                handContainer.innerHTML = `<span class="text-red-400 font-bold text-xs">你已被淘汰出局</span>`;
+                return;
+            }
+
+            players[0].hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                const isMyTurn = currentTurn === 0 && !isProcessing;
+
+                cardDiv.className = `
+                    relative flex-shrink-0 w-12 h-18 sm:w-16 sm:h-24 rounded-lg p-1.5 flex flex-col justify-between items-center 
+                    border cursor-pointer transition-all duration-150 card-shadow card-active animate-card-pop ${card.color}
+                    ${isMyTurn ? 'hover:border-white' : 'opacity-70 cursor-not-allowed'}
+                `;
+
+                let innerIcon = card.icon ? `<i class="fas ${card.icon} text-sm sm:text-lg my-auto"></i>` : `<span class="text-lg sm:text-2xl font-black my-auto">${card.label}</span>`;
+
+                cardDiv.innerHTML = `
+                    <div class="w-full text-left font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                    ${innerIcon}
+                    <div class="w-full text-right font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                `;
+
+                if (isMyTurn) {
+                    cardDiv.onclick = () => handleHumanPlayCard(index);
+                }
+
+                handContainer.appendChild(cardDiv);
+            });
+        }
+
+        function setMessage(msg) {
+            document.getElementById('game-message').innerText = msg;
+        }
+
+        function showRulesModal() {
+            document.getElementById('rules-modal').classList.remove('hidden');
+        }
+
+        function hideRulesModal() {
+            document.getElementById('rules-modal').classList.add('hidden');
+        }
+
+        function showGameOverModal(winner) {
+            const modal = document.getElementById('game-over-modal');
+            const title = document.getElementById('winner-title');
+            const desc = document.getElementById('winner-desc');
+
+            if (winner.id === 0) {
+                playSound('win');
+                title.innerText = "🏆 最终胜利！";
+                desc.innerText = "恭喜你战胜了所有 AI 对手！";
+            } else {
+                title.innerText = "💔 游戏结束";
+                desc.innerText = `${winner.name} 获得了最终胜利！`;
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function hideGameOverModal() {
+            document.getElementById('game-over-modal').classList.add('hidden');
+        }
+
+        function restartGame() {
+            initGame();
+        }
+
+        window.onload = function() {
+            initGame();
+        };
+    </script>
+</body>
+</html>
