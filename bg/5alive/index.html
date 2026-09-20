@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>5 Alive 联机卡牌游戏</title>
+    <title>5 Alive 联机卡牌游戏 (3命 Joker版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome 图标库 -->
@@ -28,7 +28,8 @@
                             lime: '#00ff66',
                             cyan: '#00e5ff',
                             purple: '#9d4edd',
-                            yellow: '#ffbe0b'
+                            yellow: '#ffbe0b',
+                            orange: '#ff6b35'
                         }
                     },
                     animation: {
@@ -76,6 +77,9 @@
 </head>
 <body class="text-white h-full max-h-[100dvh] w-screen overflow-hidden flex flex-col justify-between font-sans select-none">
 
+    <!-- 顶部消息 Toast 提示框 -->
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2 w-11/12 max-w-md"></div>
+
     <!-- 顶栏导航 -->
     <header class="w-full bg-brand-cardBg/90 backdrop-blur-md border-b border-white/10 px-3 py-2 flex justify-between items-center z-20 shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3">
@@ -92,7 +96,7 @@
                 <i id="sound-icon" class="fas fa-volume-up text-sm"></i>
             </button>
             <button onclick="showLobbyModal()" class="px-2.5 py-1.5 bg-brand-purple/40 hover:bg-brand-purple/60 border border-brand-purple/50 rounded-xl transition text-white text-xs sm:text-sm font-semibold flex items-center active:scale-95">
-                <i class="fas fa-door-open mr-1"></i>大厅/大堂
+                <i class="fas fa-door-open mr-1"></i>大厅
             </button>
             <button onclick="showRulesModal()" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-xl transition text-gray-300 text-xs sm:text-sm font-semibold flex items-center active:scale-95">
                 <i class="fas fa-question-circle mr-1"></i>规则
@@ -100,55 +104,44 @@
         </div>
     </header>
 
-    <!-- 游戏主竞技场 (支持最大6人) -->
+    <!-- 游戏主竞技场 -->
     <main class="flex-1 w-full max-w-5xl mx-auto px-2 py-1 flex flex-col justify-between relative overflow-hidden">
 
-        <!-- 顶部对手区 (包含 3 个位置: 左上, 正顶, 右上) -->
+        <!-- 顶部对手区 (Slots 1, 2, 3) -->
         <div class="grid grid-cols-3 gap-2 shrink-0 px-2 pt-1">
             <div id="slot-container-1" class="flex justify-start"></div>
             <div id="slot-container-2" class="flex justify-center"></div>
             <div id="slot-container-3" class="flex justify-end"></div>
         </div>
 
-        <!-- 中间区域：两侧对手 (左中、右中) + 中央 21 点计分中心 -->
+        <!-- 中间区域：两侧对手 + 中央计分中心 -->
         <div class="grid grid-cols-12 gap-1 items-center my-auto w-full">
-            
-            <!-- 左中对手 (位置 0) -->
             <div id="slot-container-0" class="col-span-3 flex justify-start"></div>
 
-            <!-- 中央台面：当前总分仪表盘 -->
             <div class="col-span-6 flex flex-col items-center justify-center">
                 <div class="relative flex flex-col items-center">
-                    
-                    <!-- 累计分数仪表盘 -->
                     <div id="total-dial" class="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-lime flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-pulse-glow">
                         <span class="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gray-400">当前总和</span>
                         <span id="current-total" class="text-4xl sm:text-5xl font-black text-white my-0.5 tracking-tight">0</span>
                         <span class="text-[10px] sm:text-xs text-brand-lime font-semibold">上限: 21</span>
 
-                        <!-- 出牌方向指示 -->
                         <div id="direction-indicator" class="absolute -bottom-2.5 bg-brand-purple text-white px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-md flex items-center space-x-1">
                             <i id="direction-icon" class="fas fa-redo"></i>
                             <span id="direction-text">顺时针</span>
                         </div>
                     </div>
 
-                    <!-- 动态提示消息栏 -->
                     <div id="game-message" class="mt-4 text-xs sm:text-sm font-bold text-center text-brand-cyan min-h-[28px] bg-black/60 px-3.5 py-1 rounded-full border border-white/10 max-w-xs truncate">
-                        请在联机大厅开启游戏！
+                        请在大厅创建或加入房间！
                     </div>
                 </div>
             </div>
 
-            <!-- 右中对手 (位置 4) -->
             <div id="slot-container-4" class="col-span-3 flex justify-end"></div>
-
         </div>
 
-        <!-- 底部：玩家本人控制区 (位置 5/当前人类视角) -->
+        <!-- 底部：本人控制区 -->
         <div class="shrink-0 w-full flex flex-col items-center pb-1">
-            
-            <!-- 本人玩家状态栏 -->
             <div id="my-player-bar" class="w-full max-w-md bg-brand-cardBg/90 border border-white/10 rounded-lg px-3 py-1 mb-1.5 flex items-center justify-between shadow-md">
                 <div class="flex items-center space-x-2">
                     <div class="w-6 h-6 rounded-full bg-brand-lime/20 border border-brand-lime flex items-center justify-center font-black text-brand-lime text-xs">
@@ -162,7 +155,6 @@
                 </span>
             </div>
 
-            <!-- 玩家手牌区 -->
             <div id="human-hand" class="w-full flex justify-start sm:justify-center items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-2 px-1 min-h-[110px] sm:min-h-[130px]">
                 <div class="text-xs text-gray-500">大厅设置完成后点击开始游戏</div>
             </div>
@@ -174,13 +166,12 @@
     <div id="lobby-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
         <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-lg w-full p-5 text-left shadow-2xl relative">
             <h2 class="text-xl font-extrabold text-brand-lime mb-2 flex items-center justify-between">
-                <span><i class="fas fa-gamepad mr-2"></i>游戏大厅 (最多6人)</span>
+                <span><i class="fas fa-gamepad mr-2"></i>游戏大厅 (3命 Joker版)</span>
                 <button onclick="hideLobbyModal()" class="text-gray-400 hover:text-white text-base">
                     <i class="fas fa-times"></i>
                 </button>
             </h2>
 
-            <!-- 模式选择卡片 -->
             <div class="grid grid-cols-2 gap-2 mb-4">
                 <button id="mode-offline-btn" onclick="switchLobbyMode('offline')" class="p-3 rounded-xl border border-brand-lime/50 bg-brand-lime/10 text-left transition hover:bg-brand-lime/20">
                     <div class="font-black text-sm text-brand-lime"><i class="fas fa-desktop mr-1"></i> 单机人机对战</div>
@@ -192,38 +183,35 @@
                 </button>
             </div>
 
-            <!-- 联机房间选项面板 (在线模式下显示) -->
             <div id="online-panel" class="hidden bg-black/40 p-3 rounded-xl border border-white/10 mb-4 space-y-3">
                 <div class="flex items-center justify-between gap-2">
-                    <button onclick="createOnlineRoom()" class="flex-1 py-2 bg-gradient-to-r from-brand-cyan to-blue-600 text-black font-extrabold rounded-lg text-xs hover:brightness-110 active:scale-95 transition">
+                    <button id="create-room-btn" onclick="createOnlineRoom()" class="flex-1 py-2 bg-gradient-to-r from-brand-cyan to-blue-600 text-black font-extrabold rounded-lg text-xs hover:brightness-110 active:scale-95 transition flex items-center justify-center">
                         <i class="fas fa-plus-circle mr-1"></i>创建新房间
                     </button>
                     <span class="text-xs text-gray-500 font-bold">或</span>
                     <div class="flex-1 flex gap-1">
                         <input id="join-room-input" type="text" maxlength="4" placeholder="4位房间码" class="w-full bg-black/60 border border-white/20 rounded-lg px-2 text-xs font-mono text-center uppercase tracking-widest focus:outline-none focus:border-brand-cyan">
-                        <button onclick="joinOnlineRoom()" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition active:scale-95">
+                        <button id="join-room-btn" onclick="joinOnlineRoom()" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition active:scale-95 whitespace-nowrap">
                             加入
                         </button>
                     </div>
                 </div>
 
-                <!-- 房间码展示 -->
                 <div id="room-info-box" class="hidden flex items-center justify-between bg-brand-cyan/10 border border-brand-cyan/30 px-3 py-1.5 rounded-lg">
                     <span class="text-xs text-brand-cyan">房间码: <strong id="current-room-code" class="text-sm tracking-widest text-white ml-1">----</strong></span>
                     <button onclick="copyRoomCode()" class="text-[11px] bg-brand-cyan/20 hover:bg-brand-cyan/40 text-brand-cyan font-bold px-2 py-0.5 rounded transition">
-                        <i class="fas fa-copy mr-1"></i>复制
+                        <i class="fas fa-copy mr-1"></i>复制房间码
                     </button>
                 </div>
             </div>
 
-            <!-- 玩家与 AI 数量设置选项 -->
             <div class="space-y-3 mb-5">
                 <div class="flex justify-between items-center bg-black/30 px-3 py-2 rounded-xl border border-white/5">
                     <div>
                         <div class="text-xs font-bold text-white">你的玩家名称</div>
-                        <div class="text-[10px] text-gray-400">在房间中展示的名字</div>
+                        <div class="text-[10px] text-gray-400">修改后实时同步给大厅朋友</div>
                     </div>
-                    <input id="player-name-input" type="text" value="玩家" class="bg-black/60 border border-white/20 rounded-lg px-2 py-1 text-xs text-white text-right w-28 focus:outline-none focus:border-brand-lime">
+                    <input id="player-name-input" type="text" value="玩家" oninput="onNameInputChange()" class="bg-black/60 border border-white/20 rounded-lg px-2 py-1 text-xs text-white text-right w-28 focus:outline-none focus:border-brand-lime">
                 </div>
 
                 <div class="flex justify-between items-center bg-black/30 px-3 py-2 rounded-xl border border-white/5">
@@ -238,10 +226,9 @@
                     </div>
                 </div>
 
-                <!-- 当前房间玩家成员列表 -->
                 <div class="bg-black/40 p-3 rounded-xl border border-white/10">
                     <div class="flex justify-between items-center mb-2">
-                        <span class="text-xs font-extrabold text-gray-300">已就绪玩家 (<span id="total-player-count">4</span>/6):</span>
+                        <span class="text-xs font-extrabold text-gray-300">已就绪玩家 (<span id="total-player-count">1</span>/6):</span>
                         <span id="host-badge" class="text-[10px] bg-brand-yellow/20 text-brand-yellow border border-brand-yellow/30 px-2 py-0.5 rounded font-bold">房主</span>
                     </div>
                     <div id="lobby-player-list" class="grid grid-cols-2 gap-1.5 text-xs">
@@ -256,26 +243,27 @@
         </div>
     </div>
 
-    <!-- 规则说明弹窗 -->
+    <!-- 规则说明弹窗 (包含全套 Joker 特殊牌) -->
     <div id="rules-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-brand-cardBg border border-white/20 rounded-2xl max-w-md w-full p-5 text-left shadow-2xl relative">
             <button onclick="hideRulesModal()" class="absolute top-3 right-3 text-gray-400 hover:text-white text-lg p-2">
                 <i class="fas fa-times"></i>
             </button>
             <h2 class="text-xl font-extrabold text-brand-lime mb-3 flex items-center">
-                <i class="fas fa-book-open mr-2"></i> 规则说明 (5 Alive)
+                <i class="fas fa-book-open mr-2"></i> 规则说明 (3命 Joker版)
             </h2>
             <div class="space-y-2.5 text-xs sm:text-sm text-gray-300 max-h-[55vh] overflow-y-auto pr-1">
-                <p><strong class="text-white">1. 人数与目标：</strong> 支持 2~6 名玩家（含 AI）。保持中央累计点数<strong class="text-brand-pink">不超过 21 点</strong>！</p>
-                <p><strong class="text-white">2. 扣血机制：</strong> 每人拥有 <strong class="text-brand-lime">5 条命</strong>。打出的牌使总数突破 21 时，该玩家<strong class="text-red-400">扣除 1 条命</strong>并重置回合。</p>
-                <p><strong class="text-white">3. 清空手牌：</strong> 若有玩家率先打光所有手牌，回合结束，<strong class="text-red-400">其他所有玩家各扣 1 条命</strong>！</p>
-                <p><strong class="text-white">4. 特殊功能牌：</strong></p>
-                <ul class="list-disc list-inside space-y-1 pl-1 text-xs text-gray-300">
-                    <li><span class="text-brand-cyan font-bold">= 0</span>: 当前累计点数重置为 0</li>
-                    <li><span class="text-brand-pink font-bold">= 21</span>: 当前点数拉满至 21</li>
-                    <li><span class="text-brand-yellow font-bold">SKIP</span>: 跳过下一位玩家的回合</li>
-                    <li><span class="text-brand-purple font-bold">REV</span>: 反转出牌顺序</li>
-                    <li><span class="text-emerald-400 font-bold">+1 / +2</span>: 强制下一位玩家抽 1 或 2 张牌</li>
+                <p><strong class="text-white">1. 生命与目标：</strong> 每人拥有 <strong class="text-brand-lime">3 条命</strong>。保持中央累计点数<strong class="text-brand-pink">不超过 21 点</strong>！打出牌突破 21 时<strong class="text-red-400">扣 1 条命</strong>。</p>
+                <p><strong class="text-white">2. 清空手牌：</strong> 若有玩家率先打光手牌，<strong class="text-red-400">其他所有玩家各扣 1 条命</strong>！</p>
+                <p><strong class="text-white">3. Joker 专属特殊功能牌：</strong></p>
+                <ul class="list-disc list-inside space-y-1.5 pl-1 text-xs text-gray-300">
+                    <li><span class="text-cyan-400 font-bold">=0 / =10 / =21</span>: 将点数直接重置或设定为 0、10 或 21。</li>
+                    <li><span class="text-emerald-400 font-bold">+1 / +2</span>: <strong class="text-white">所有其他玩家</strong>立刻从牌堆强制抽 1 或 2 张牌！</li>
+                    <li><span class="text-orange-400 font-bold">跳过自己 (ÜBERSPRING MICH)</span>: 安全过牌，直接交由下一位。</li>
+                    <li><span class="text-amber-400 font-bold">跳过 (AUSSETZEN)</span>: 跳过下一位。若<strong class="text-white">仅剩 2 人对战</strong>时打出，自己获得<strong class="text-brand-yellow">额外回合</strong>！</li>
+                    <li><span class="text-purple-400 font-bold">反转 (RÜCKWÄRTS)</span>: 反转出牌顺序（2人时当作跳过）。</li>
+                    <li><span class="text-pink-400 font-bold">重新洗牌 (NEU MISCHEN)</span>: 收集全场手牌重洗平分给所有玩家，点数清零！若为最后一张牌打出则直接赢下本轮。</li>
+                    <li><span class="text-red-500 font-bold">炸弹 (BOMBE)</span>: 全场震撼！所有其他玩家必须**立刻弃除一张 0 牌**，没有 0 牌的人<strong class="text-red-400">立刻扣 1 条命</strong>！随后点数清零。</li>
                 </ul>
             </div>
             <button onclick="hideRulesModal()" class="mt-4 w-full py-2.5 bg-brand-lime text-black font-extrabold rounded-xl shadow-md hover:brightness-110 active:scale-95 transition text-sm">
@@ -299,9 +287,45 @@
     </div>
 
     <script>
-        // Web Audio API 音效引擎
         let audioCtx = null;
         let soundEnabled = true;
+
+        // 全局优化的 WebRTC ICE STUN 服务器配置，保障 4G/5G/WiFi 网络穿透
+        const PEER_CONFIG = {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:stun.nextcloud.com:443' },
+                    { urls: 'stun:stun.services.mozilla.com' }
+                ]
+            },
+            debug: 1
+        };
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgStyle = 'bg-black/90 border-brand-cyan text-brand-cyan';
+            if (type === 'error') bgStyle = 'bg-black/90 border-red-500 text-red-400';
+            if (type === 'success') bgStyle = 'bg-black/90 border-brand-lime text-brand-lime';
+
+            toast.className = `px-4 py-2 rounded-xl border text-xs sm:text-sm font-bold shadow-2xl backdrop-blur-md transition-all transform translate-y-2 opacity-0 flex items-center gap-2 ${bgStyle}`;
+            toast.innerHTML = `<i class="fas ${type === 'error' ? 'fa-exclamation-circle' : type === 'success' ? 'fa-check-circle' : 'fa-info-circle'}"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
 
         function initAudio() {
             if (!audioCtx) {
@@ -333,6 +357,14 @@
                     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
                     osc.start(now);
                     osc.stop(now + 0.08);
+                } else if (type === 'bomb') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.4);
+                    gain.gain.setValueAtTime(0.5, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
                 } else if (type === 'bust') {
                     osc.type = 'sawtooth';
                     osc.frequency.setValueAtTime(250, now);
@@ -362,40 +394,44 @@
             icon.className = soundEnabled ? 'fas fa-volume-up text-sm text-brand-lime' : 'fas fa-volume-mute text-sm text-gray-500';
         }
 
-        // 游戏状态定义
-        let currentMode = 'offline'; // 'offline' 或 'online'
+        let currentMode = 'offline'; 
         let isHost = true;
         let peer = null;
         let roomCode = '';
-        let connections = []; // 房主保存的所有网络连接
+        let connections = []; 
 
-        let aiCount = 3; // 默认 3 个 AI
+        let aiCount = 3; 
         let myPlayerIndex = 0;
 
-        // 全局玩家列表（最多6个元素）
-        // { id, name, isAI, isSelf, peerId, lives, hand: [] }
         let players = [];
         let deck = [];
         let runningTotal = 0;
         let currentTurn = 0;
-        let playDirection = 1; // 1: 顺时针, -1: 逆时针
+        let playDirection = 1; 
         let isProcessing = false;
 
-        // 生成 5 Alive 标准牌堆
+        // 生成完整的 Joker 特殊牌库
         function generateDeck() {
             let newDeck = [];
+            // 数字牌 0 ~ 7
             for (let num = 0; num <= 7; num++) {
-                for (let i = 0; i < 6; i++) {
+                for (let i = 0; i < 5; i++) {
                     newDeck.push({ type: 'NUMBER', value: num, label: `${num}`, color: 'bg-gradient-to-br from-slate-800 to-slate-900 border-gray-600 text-white' });
                 }
             }
-            for (let i = 0; i < 5; i++) newDeck.push({ type: 'SET_ZERO', value: 0, label: '=0', color: 'bg-gradient-to-br from-cyan-600 to-blue-800 border-cyan-400 text-cyan-200' });
-            for (let i = 0; i < 4; i++) newDeck.push({ type: 'SET_21', value: 21, label: '=21', color: 'bg-gradient-to-br from-pink-600 to-rose-900 border-pink-400 text-pink-100' });
-            for (let i = 0; i < 5; i++) newDeck.push({ type: 'SKIP', value: 0, label: 'SKIP', icon: 'fa-ban', color: 'bg-gradient-to-br from-amber-600 to-yellow-800 border-yellow-400 text-amber-200' });
-            for (let i = 0; i < 5; i++) newDeck.push({ type: 'REVERSE', value: 0, label: 'REV', icon: 'fa-exchange-alt', color: 'bg-gradient-to-br from-purple-600 to-indigo-900 border-purple-400 text-purple-200' });
-            for (let i = 0; i < 4; i++) newDeck.push({ type: 'DRAW_1', value: 0, label: '+1', icon: 'fa-plus', color: 'bg-gradient-to-br from-emerald-600 to-teal-800 border-emerald-400 text-emerald-200' });
-            for (let i = 0; i < 3; i++) newDeck.push({ type: 'DRAW_2', value: 0, label: '+2', icon: 'fa-plus-circle', color: 'bg-gradient-to-br from-emerald-700 to-green-950 border-emerald-300 text-emerald-100' });
+            // Joker 牌
+            for (let i = 0; i < 4; i++) newDeck.push({ type: 'SET_ZERO', value: 0, label: '=0', color: 'bg-gradient-to-br from-cyan-600 to-blue-800 border-cyan-400 text-cyan-100' });
+            for (let i = 0; i < 3; i++) newDeck.push({ type: 'SET_10', value: 10, label: '=10', color: 'bg-gradient-to-br from-teal-600 to-emerald-800 border-teal-300 text-teal-100' });
+            for (let i = 0; i < 3; i++) newDeck.push({ type: 'SET_21', value: 21, label: '=21', color: 'bg-gradient-to-br from-pink-600 to-rose-900 border-pink-400 text-pink-100' });
+            for (let i = 0; i < 4; i++) newDeck.push({ type: 'SKIP', value: 0, label: 'SKIP', icon: 'fa-forward', color: 'bg-gradient-to-br from-amber-600 to-yellow-800 border-yellow-400 text-amber-100' });
+            for (let i = 0; i < 3; i++) newDeck.push({ type: 'SKIP_ME', value: 0, label: 'PASS', icon: 'fa-user-slash', color: 'bg-gradient-to-br from-orange-600 to-amber-800 border-orange-400 text-orange-100' });
+            for (let i = 0; i < 4; i++) newDeck.push({ type: 'REVERSE', value: 0, label: 'REV', icon: 'fa-exchange-alt', color: 'bg-gradient-to-br from-purple-600 to-indigo-900 border-purple-400 text-purple-100' });
+            for (let i = 0; i < 3; i++) newDeck.push({ type: 'DRAW_1_ALL', value: 0, label: '+1 全场', icon: 'fa-plus', color: 'bg-gradient-to-br from-emerald-600 to-teal-800 border-emerald-300 text-emerald-100' });
+            for (let i = 0; i < 2; i++) newDeck.push({ type: 'DRAW_2_ALL', value: 0, label: '+2 全场', icon: 'fa-plus-circle', color: 'bg-gradient-to-br from-emerald-700 to-green-950 border-emerald-300 text-emerald-100' });
+            for (let i = 0; i < 2; i++) newDeck.push({ type: 'RESHUFFLE', value: 0, label: '重洗', icon: 'fa-sync-alt', color: 'bg-gradient-to-br from-fuchsia-600 to-pink-800 border-fuchsia-300 text-fuchsia-100' });
+            for (let i = 0; i < 2; i++) newDeck.push({ type: 'BOMB', value: 0, label: '炸弹', icon: 'fa-bomb', color: 'bg-gradient-to-br from-red-600 to-orange-900 border-red-400 text-yellow-300' });
 
+            // 洗牌算法
             for (let i = newDeck.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
@@ -409,7 +445,6 @@
             const onlineBtn = document.getElementById('mode-online-btn');
             const onlinePanel = document.getElementById('online-panel');
 
-            // 切换模式时清理残留 AI
             players = players.filter(p => !p.isAI);
 
             if (mode === 'offline') {
@@ -418,11 +453,30 @@
                 onlinePanel.classList.add('hidden');
                 isHost = true;
                 document.getElementById('room-badge-text').innerText = '单机模式';
+                document.getElementById('start-game-btn').disabled = false;
             } else {
                 onlineBtn.className = 'p-3 rounded-xl border border-brand-cyan/50 bg-brand-cyan/10 text-left transition hover:bg-brand-cyan/20';
                 offlineBtn.className = 'p-3 rounded-xl border border-white/10 bg-white/5 text-left transition hover:bg-white/10';
                 onlinePanel.classList.remove('hidden');
                 document.getElementById('room-badge-text').innerText = roomCode ? `房间: ${roomCode}` : '多人模式';
+            }
+            updateLobbyPlayerList();
+        }
+
+        function onNameInputChange() {
+            const newName = document.getElementById('player-name-input').value.trim() || '玩家';
+            
+            if (currentMode === 'online') {
+                const me = players.find(p => p.id === myPlayerIndex);
+                if (me) me.name = newName;
+                if (isHost) {
+                    broadcastLobbyState();
+                } else {
+                    const hostConn = connections[0];
+                    if (hostConn && hostConn.open) {
+                        hostConn.send({ type: 'UPDATE_NAME', playerIdx: myPlayerIndex, name: newName });
+                    }
+                }
             }
             updateLobbyPlayerList();
         }
@@ -450,11 +504,16 @@
                     currentPlayers.push({ name: `AI 电脑 ${i}`, isAI: true, isSelf: false });
                 }
             } else {
-                // 多人联机模式：先过滤出真人玩家，避免 AI 累加重复
                 const humanPlayers = players.filter(p => !p.isAI);
+                if (humanPlayers.length === 0) {
+                    humanPlayers.push({ id: myPlayerIndex, name: nameInput, isAI: false });
+                }
+
                 humanPlayers.forEach(p => {
-                    currentPlayers.push({ name: p.name, isAI: false, isSelf: p.id === myPlayerIndex });
+                    const isSelf = p.id === myPlayerIndex;
+                    currentPlayers.push({ name: p.name + (isSelf ? ' (你)' : ''), isAI: false, isSelf: isSelf });
                 });
+
                 for (let i = 1; i <= aiCount; i++) {
                     currentPlayers.push({ name: `AI 电脑 ${i}`, isAI: true, isSelf: false });
                 }
@@ -473,7 +532,17 @@
 
             document.getElementById('lobby-player-list').innerHTML = listHtml;
             document.getElementById('total-player-count').innerText = currentPlayers.length;
-            document.getElementById('start-game-btn').disabled = currentPlayers.length < 2 || currentPlayers.length > 6;
+            
+            const startBtn = document.getElementById('start-game-btn');
+            if (currentMode === 'online' && !isHost) {
+                startBtn.disabled = true;
+                startBtn.innerText = "等待房主开始游戏...";
+                startBtn.className = "w-full py-3 bg-gray-700 text-gray-400 font-bold rounded-xl cursor-not-allowed text-sm";
+            } else {
+                startBtn.disabled = currentPlayers.length < 2 || currentPlayers.length > 6;
+                startBtn.innerText = "开始游戏 (START GAME)";
+                startBtn.className = "w-full py-3 bg-gradient-to-r from-brand-lime to-emerald-400 text-black font-black rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition text-sm";
+            }
         }
 
         function createOnlineRoom() {
@@ -481,52 +550,86 @@
             roomCode = code;
             isHost = true;
 
+            showToast("正在建立在线房间...", "info");
+
             const name = document.getElementById('player-name-input').value.trim() || '房主';
-            players = [{ id: 0, name: name, isAI: false, peerId: 'host', lives: 5, hand: [] }];
+            players = [{ id: 0, name: name, isAI: false, peerId: 'host', lives: 3, hand: [] }];
             myPlayerIndex = 0;
 
-            if (peer) peer.destroy();
-            peer = new Peer('5alive-' + code);
+            if (peer) { try { peer.destroy(); } catch(e){} }
+            peer = new Peer('5alive-v2-' + code, PEER_CONFIG);
 
             peer.on('open', (id) => {
+                showToast(`房间创建成功！房间码：${code}`, "success");
                 document.getElementById('room-info-box').classList.remove('hidden');
                 document.getElementById('current-room-code').innerText = code;
                 document.getElementById('room-badge-text').innerText = `房间: ${code}`;
+                document.getElementById('host-badge').classList.remove('hidden');
+                document.getElementById('ai-minus-btn').disabled = false;
+                document.getElementById('ai-plus-btn').disabled = false;
                 updateLobbyPlayerList();
             });
 
             peer.on('connection', (conn) => {
-                connections.push(conn);
+                conn.on('open', () => {
+                    connections.push(conn);
+                    showToast("有新玩家正在连接...", "info");
+                });
+
                 conn.on('data', (data) => handleHostReceiveData(data, conn));
+
                 conn.on('close', () => {
                     connections = connections.filter(c => c !== conn);
                     players = players.filter(p => p.peerId !== conn.peer && !p.isAI);
-                    // 重新对真人赋值 ID
                     players.forEach((p, idx) => p.id = idx);
+                    showToast("一位玩家离开了房间", "info");
                     updateLobbyPlayerList();
                     broadcastLobbyState();
                 });
+            });
+
+            peer.on('error', (err) => {
+                console.error("Peer Error:", err);
+                if (err.type === 'unavailable-id') {
+                    showToast("当前房间码冲突，请重试", "error");
+                } else {
+                    showToast("服务器连接异常: " + err.type, "error");
+                }
             });
         }
 
         function joinOnlineRoom() {
             const inputCode = document.getElementById('join-room-input').value.trim();
             if (inputCode.length !== 4) {
-                alert('请输入 4 位有效房间码！');
+                showToast('请输入 4 位有效房间码！', 'error');
                 return;
             }
 
             isHost = false;
             roomCode = inputCode;
-            if (peer) peer.destroy();
-            peer = new Peer();
+            showToast("正在加入房间...", "info");
+
+            if (peer) { try { peer.destroy(); } catch(e){} }
+            peer = new Peer(PEER_CONFIG);
 
             peer.on('open', (id) => {
-                const conn = peer.connect('5alive-' + inputCode);
+                const targetHostPeerId = '5alive-v2-' + inputCode;
+                const conn = peer.connect(targetHostPeerId, { reliable: true });
                 const name = document.getElementById('player-name-input').value.trim() || '玩家';
 
+                connections = [conn];
+
+                let connectTimeout = setTimeout(() => {
+                    if (!conn.open) {
+                        showToast("连接房主超时！请检查房间码。", "error");
+                    }
+                }, 8000);
+
                 conn.on('open', () => {
+                    clearTimeout(connectTimeout);
+                    showToast("已成功连入房间！", "success");
                     conn.send({ type: 'JOIN', name: name });
+
                     document.getElementById('room-info-box').classList.remove('hidden');
                     document.getElementById('current-room-code').innerText = inputCode;
                     document.getElementById('room-badge-text').innerText = `房间: ${inputCode}`;
@@ -536,6 +639,15 @@
                 });
 
                 conn.on('data', (data) => handleClientReceiveData(data));
+                conn.on('close', () => showToast("与房主的连接断开！", "error"));
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'peer-unavailable') {
+                    showToast("未找到该房间！请确认房间码是否存在。", "error");
+                } else {
+                    showToast("连线出现错误: " + err.type, "error");
+                }
             });
         }
 
@@ -547,12 +659,11 @@
             tempInput.select();
             document.execCommand('copy');
             document.body.removeChild(tempInput);
-            alert(`房间码 ${roomCode} 已复制到剪贴板！`);
+            showToast(`房间码 ${roomCode} 已复制！`, "success");
         }
 
         function handleHostReceiveData(data, conn) {
             if (data.type === 'JOIN') {
-                // 确保只计算真人玩家
                 const humanPlayers = players.filter(p => !p.isAI);
                 if (humanPlayers.length + aiCount >= 6) {
                     conn.send({ type: 'ERROR', message: '房间人数已满（上限6人）' });
@@ -560,17 +671,23 @@
                 }
                 players = humanPlayers;
                 const newIdx = players.length;
-                players.push({ id: newIdx, name: data.name, isAI: false, peerId: conn.peer, lives: 5, hand: [] });
+                players.push({ id: newIdx, name: data.name, isAI: false, peerId: conn.peer, lives: 3, hand: [] });
                 
-                // 超出6人时自动缩减 AI
                 if (players.length + aiCount > 6) {
                     aiCount = Math.max(0, 6 - players.length);
                     document.getElementById('ai-count-display').innerText = aiCount;
                 }
 
                 conn.send({ type: 'INIT_JOIN', playerIndex: newIdx });
+                showToast(`玩家 [${data.name}] 加入了房间`, "success");
                 updateLobbyPlayerList();
                 broadcastLobbyState();
+            } else if (data.type === 'UPDATE_NAME') {
+                if (players[data.playerIdx]) {
+                    players[data.playerIdx].name = data.name;
+                    updateLobbyPlayerList();
+                    broadcastLobbyState();
+                }
             } else if (data.type === 'PLAY_CARD') {
                 if (currentTurn === data.playerIdx && !isProcessing) {
                     executeCardPlay(data.playerIdx, players[data.playerIdx].hand[data.cardIndex], data.cardIndex);
@@ -581,8 +698,10 @@
         function handleClientReceiveData(data) {
             if (data.type === 'INIT_JOIN') {
                 myPlayerIndex = data.playerIndex;
+            } else if (data.type === 'ERROR') {
+                showToast(data.message, "error");
             } else if (data.type === 'LOBBY_STATE') {
-                players = data.players.filter(p => !p.isAI);
+                players = data.players;
                 aiCount = data.aiCount;
                 document.getElementById('ai-count-display').innerText = aiCount;
                 updateLobbyPlayerList();
@@ -599,23 +718,26 @@
 
         function broadcastLobbyState() {
             if (!isHost) return;
-            const humanPlayers = players.filter(p => !p.isAI);
             connections.forEach(conn => {
-                conn.send({ type: 'LOBBY_STATE', players: humanPlayers, aiCount: aiCount });
+                if (conn.open) {
+                    conn.send({ type: 'LOBBY_STATE', players: players.filter(p => !p.isAI), aiCount: aiCount });
+                }
             });
         }
 
         function broadcastState(msg = "") {
             if (!isHost) return;
             connections.forEach(conn => {
-                conn.send({
-                    type: 'GAME_STATE',
-                    players: players,
-                    runningTotal: runningTotal,
-                    currentTurn: currentTurn,
-                    playDirection: playDirection,
-                    message: msg || document.getElementById('game-message').innerText
-                });
+                if (conn.open) {
+                    conn.send({
+                        type: 'GAME_STATE',
+                        players: players,
+                        runningTotal: runningTotal,
+                        currentTurn: currentTurn,
+                        playDirection: playDirection,
+                        message: msg || document.getElementById('game-message').innerText
+                    });
+                }
             });
         }
 
@@ -623,13 +745,12 @@
             const myName = document.getElementById('player-name-input').value.trim() || '玩家';
 
             if (currentMode === 'offline') {
-                players = [{ id: 0, name: myName + ' (你)', isAI: false, lives: 5, hand: [] }];
+                players = [{ id: 0, name: myName + ' (你)', isAI: false, lives: 3, hand: [] }];
                 for (let i = 1; i <= aiCount; i++) {
-                    players.push({ id: i, name: `AI 电脑 ${i}`, isAI: true, lives: 5, hand: [] });
+                    players.push({ id: i, name: `AI 电脑 ${i}`, isAI: true, lives: 3, hand: [] });
                 }
                 myPlayerIndex = 0;
             } else if (isHost) {
-                // 清理旧 AI 并重新分配 ID
                 players = players.filter(p => !p.isAI);
                 players.forEach((p, idx) => p.id = idx);
 
@@ -637,7 +758,7 @@
                 const actualAiToAdd = Math.min(aiCount, 6 - currentHumanCount);
                 for (let i = 0; i < actualAiToAdd; i++) {
                     const aiIdx = currentHumanCount + i;
-                    players.push({ id: aiIdx, name: `AI 电脑 ${i + 1}`, isAI: true, lives: 5, hand: [] });
+                    players.push({ id: aiIdx, name: `AI 电脑 ${i + 1}`, isAI: true, lives: 3, hand: [] });
                 }
             }
 
@@ -646,7 +767,7 @@
         }
 
         function initGame() {
-            players.forEach(p => { p.lives = 5; p.hand = []; });
+            players.forEach(p => { p.lives = 3; p.hand = []; }); // 修改初始生命为 3 条
             currentTurn = 0;
             playDirection = 1;
             startRound("游戏开始！各玩家发 10 张手牌。");
@@ -689,9 +810,8 @@
                 const card = players[myPlayerIndex].hand[cardIndex];
                 executeCardPlay(myPlayerIndex, card, cardIndex);
             } else {
-                // 发送出牌动作给房主
-                const hostConn = connections[0] || (peer ? peer.connections[Object.keys(peer.connections)[0]]?.[0] : null);
-                if (hostConn) {
+                const hostConn = connections[0];
+                if (hostConn && hostConn.open) {
                     hostConn.send({ type: 'PLAY_CARD', playerIdx: myPlayerIndex, cardIndex: cardIndex });
                 }
             }
@@ -699,40 +819,113 @@
 
         function executeCardPlay(playerIdx, card, cardIndex) {
             isProcessing = true;
-            playSound('playCard');
-
             const player = players[playerIdx];
             player.hand.splice(cardIndex, 1);
 
             let effectText = "";
             let newTotal = runningTotal;
+            let playSoundType = 'playCard';
 
+            // 处理各类卡牌逻辑
             if (card.type === 'NUMBER') {
                 newTotal += card.value;
                 effectText = `${player.name} 打出了 ${card.value} 点 (总和: ${newTotal})`;
             } else if (card.type === 'SET_ZERO') {
                 newTotal = 0;
-                effectText = `${player.name} 打出 =0，总数重置为 0！`;
+                effectText = `${player.name} 打出 =0，点数重置为 0！`;
+            } else if (card.type === 'SET_10') {
+                newTotal = 10;
+                effectText = `${player.name} 打出 =10，点数设定为 10 点！`;
             } else if (card.type === 'SET_21') {
                 newTotal = 21;
-                effectText = `${player.name} 打出 =21，总数提升至 21 点！`;
+                effectText = `${player.name} 打出 =21，点数提升至 21 点！`;
             } else if (card.type === 'SKIP') {
-                effectText = `${player.name} 打出 SKIP，跳过下一位！`;
+                const alivePlayers = players.filter(p => p.lives > 0);
+                if (alivePlayers.length === 2) {
+                    effectText = `${player.name} 打出跳过！仅剩2人对战，获得【额外回合】！`;
+                } else {
+                    effectText = `${player.name} 打出 SKIP，跳过下一位！`;
+                }
+            } else if (card.type === 'SKIP_ME') {
+                effectText = `${player.name} 打出【跳过自己】，安全过牌！`;
             } else if (card.type === 'REVERSE') {
                 playDirection *= -1;
                 effectText = `${player.name} 打出 REV，反转出牌顺序！`;
-            } else if (card.type === 'DRAW_1') {
-                effectText = `${player.name} 打出 +1！`;
-            } else if (card.type === 'DRAW_2') {
-                effectText = `${player.name} 打出 +2！`;
+            } else if (card.type === 'DRAW_1_ALL') {
+                effectText = `${player.name} 打出 +1！全场其他玩家各抽 1 张牌！`;
+                players.forEach(p => {
+                    if (p.id !== playerIdx && p.lives > 0) {
+                        if (deck.length > 0) p.hand.push(deck.pop());
+                    }
+                });
+            } else if (card.type === 'DRAW_2_ALL') {
+                effectText = `${player.name} 打出 +2！全场其他玩家各抽 2 张牌！`;
+                players.forEach(p => {
+                    if (p.id !== playerIdx && p.lives > 0) {
+                        for (let i = 0; i < 2; i++) {
+                            if (deck.length > 0) p.hand.push(deck.pop());
+                        }
+                    }
+                });
+            } else if (card.type === 'RESHUFFLE') {
+                newTotal = 0;
+                effectText = `${player.name} 打出【重新洗牌】！全场手牌已重洗平分，点数清零！`;
+                
+                // 收集全场所有手牌
+                let allCards = [];
+                players.forEach(p => {
+                    if (p.lives > 0) {
+                        allCards.push(...p.hand);
+                        p.hand = [];
+                    }
+                });
+
+                if (allCards.length > 0) {
+                    // 重新洗牌
+                    for (let i = allCards.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+                    }
+                    // 平分发放
+                    const aliveList = players.filter(p => p.lives > 0);
+                    let idx = 0;
+                    while (allCards.length > 0) {
+                        aliveList[idx % aliveList.length].hand.push(allCards.pop());
+                        idx++;
+                    }
+                }
+            } else if (card.type === 'BOMB') {
+                newTotal = 0;
+                playSoundType = 'bomb';
+                let penaltyList = [];
+
+                players.forEach(p => {
+                    if (p.id !== playerIdx && p.lives > 0) {
+                        // 寻找手牌中的 0 牌 (数字 0 或 =0)
+                        const zeroIdx = p.hand.findIndex(c => c.value === 0 || c.type === 'SET_ZERO');
+                        if (zeroIdx !== -1) {
+                            p.hand.splice(zeroIdx, 1); // 自动弃除 0 牌
+                        } else {
+                            p.lives--; // 无法弃牌则扣除 1 命
+                            penaltyList.push(p.name);
+                        }
+                    }
+                });
+
+                if (penaltyList.length > 0) {
+                    effectText = `💣 炸弹爆发！${penaltyList.join(', ')} 没有 0 牌，直接扣除 1 条命！`;
+                } else {
+                    effectText = `💣 炸弹爆发！全场其他玩家均成功弃掉一张 0 牌！`;
+                }
             }
 
+            playSound(playSoundType);
             runningTotal = newTotal;
             setMessage(effectText);
             updateUI();
             broadcastState(effectText);
 
-            // 1. 判断爆牌 (> 21 点)
+            // 检查爆牌情况
             if (runningTotal > 21) {
                 setTimeout(() => {
                     playSound('bust');
@@ -756,7 +949,7 @@
                 return;
             }
 
-            // 2. 判断手牌清空获胜
+            // 检查清空手牌胜利条件
             if (player.hand.length === 0) {
                 setTimeout(() => {
                     playSound('win');
@@ -779,20 +972,18 @@
                 return;
             }
 
-            // 3. 计算下一个行动者
-            let step = (card.type === 'SKIP') ? 2 : 1;
-            let nextPlayerIdx = getNextActivePlayerIndex(currentTurn, step * playDirection);
+            // 计算下一位出牌玩家
+            let step = 1;
+            const aliveCount = players.filter(p => p.lives > 0).length;
 
-            // 强制加牌功能
-            if (card.type === 'DRAW_1' || card.type === 'DRAW_2') {
-                const count = card.type === 'DRAW_1' ? 1 : 2;
-                const targetPlayer = players[nextPlayerIdx];
-                for (let i = 0; i < count; i++) {
-                    if (deck.length > 0) targetPlayer.hand.push(deck.pop());
-                }
-                const drawMsg = `${player.name} 强制 ${targetPlayer.name} 抽了 ${count} 张牌！`;
-                setMessage(drawMsg);
+            if (card.type === 'SKIP') {
+                if (aliveCount === 2) step = 0; // 2人对战时出 SKIP 获得额外回合
+                else step = 2;
+            } else if (card.type === 'SKIP_ME') {
+                step = 1; // 跳过自己，正常走1步
             }
+
+            let nextPlayerIdx = (step === 0) ? playerIdx : getNextActivePlayerIndex(currentTurn, step * playDirection);
 
             currentTurn = nextPlayerIdx;
             updateUI();
@@ -817,7 +1008,8 @@
             ai.hand.forEach((card, index) => {
                 let projectTotal = runningTotal;
                 if (card.type === 'NUMBER') projectTotal += card.value;
-                else if (card.type === 'SET_ZERO') projectTotal = 0;
+                else if (card.type === 'SET_ZERO' || card.type === 'RESHUFFLE' || card.type === 'BOMB') projectTotal = 0;
+                else if (card.type === 'SET_10') projectTotal = 10;
                 else if (card.type === 'SET_21') projectTotal = 21;
 
                 if (projectTotal <= 21) {
@@ -828,7 +1020,7 @@
             let chosenIndex = 0;
             if (safeCards.length > 0) {
                 if (runningTotal >= 17) {
-                    let zeroCard = safeCards.find(c => c.card.type === 'SET_ZERO');
+                    let zeroCard = safeCards.find(c => c.card.type === 'SET_ZERO' || c.card.type === 'RESHUFFLE');
                     if (zeroCard) chosenIndex = zeroCard.index;
                     else {
                         safeCards.sort((a, b) => a.card.value - b.card.value);
@@ -869,7 +1061,6 @@
         }
 
         function updateUI() {
-            // 1. 中央总分与色彩渐变
             const totalEl = document.getElementById('current-total');
             const dialEl = document.getElementById('total-dial');
             totalEl.innerText = runningTotal;
@@ -882,21 +1073,19 @@
                 dialEl.className = "w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-b from-gray-800 to-brand-cardBg border-4 border-brand-pink flex flex-col items-center justify-center relative shadow-2xl transition-all duration-300 animate-bounce";
             }
 
-            // 2. 出牌方向
             document.getElementById('direction-text').innerText = playDirection === 1 ? "顺时针" : "逆时针";
             document.getElementById('direction-icon').className = playDirection === 1 ? "fas fa-redo" : "fas fa-undo";
 
-            // 3. 渲染周围最多 5 个对手位置 (以视角为中心排布)
             renderOpponentSlots();
 
-            // 4. 渲染视角本人控制栏与手牌
             const me = players[myPlayerIndex];
             if (me) {
                 document.getElementById('my-player-name').innerText = me.name;
                 document.getElementById('my-card-count').innerText = `手牌: ${me.hand ? me.hand.length : 0}`;
 
+                // 渲染 3 条命的心形图标
                 let livesHtml = '';
-                for (let i = 0; i < 5; i++) {
+                for (let i = 0; i < 3; i++) {
                     livesHtml += i < me.lives 
                         ? `<span class="text-brand-lime text-xs"><i class="fas fa-heart"></i></span>` 
                         : `<span class="text-gray-600 text-xs"><i class="far fa-heart"></i></span>`;
@@ -907,18 +1096,15 @@
             renderHumanHand();
         }
 
-        // 将当前玩家视点移至底部，计算并绘制周围对手 Slots (0..4)
         function renderOpponentSlots() {
-            // 场景 5 个挂载位置 ID
             const slotContainers = [
-                'slot-container-0', // 左中
-                'slot-container-1', // 左上
-                'slot-container-2', // 正顶
-                'slot-container-3', // 右上
-                'slot-container-4'  // 右中
+                'slot-container-0', 
+                'slot-container-1', 
+                'slot-container-2', 
+                'slot-container-3', 
+                'slot-container-4'  
             ];
 
-            // 清空所有插槽
             slotContainers.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = '';
@@ -926,19 +1112,18 @@
 
             if (players.length <= 1) return;
 
-            // 相对于 myPlayerIndex 排序其他对手位置
             let opponentIndices = [];
             for (let i = 1; i < players.length; i++) {
                 opponentIndices.push((myPlayerIndex + i) % players.length);
             }
 
-            // 根据对手总数量选择最佳展示插槽，避免 2 人对战时被排在侧边
+            // 对手对称分布适配
             const slotMappings = {
-                1: [2],            // 1 个对手（2人局）：居中放在正上方
-                2: [0, 4],         // 2 个对手（3人局）：分列左右两侧
-                3: [0, 2, 4],      // 3 个对手（4人局）：左、正上、右
-                4: [0, 1, 3, 4],   // 4 个对手（5人局）：左中、左上、右上、右中
-                5: [0, 1, 2, 3, 4] // 5 个对手（6人局）：全满 5 个位置
+                1: [2],            
+                2: [0, 4],         
+                3: [0, 2, 4],      
+                4: [0, 1, 3, 4],   
+                5: [0, 1, 2, 3, 4] 
             };
 
             const targetSlots = slotMappings[opponentIndices.length] || [0, 1, 2, 3, 4];
@@ -951,8 +1136,9 @@
 
                 const isTurn = currentTurn === playerIdx && p.lives > 0;
                 
+                // 3 条命心形渲染
                 let livesHtml = '';
-                for (let i = 0; i < 5; i++) {
+                for (let i = 0; i < 3; i++) {
                     livesHtml += i < p.lives 
                         ? `<span class="text-brand-lime text-[10px]"><i class="fas fa-heart"></i></span>` 
                         : `<span class="text-gray-600 text-[10px]"><i class="far fa-heart"></i></span>`;
@@ -1008,9 +1194,9 @@
                 let innerIcon = card.icon ? `<i class="fas ${card.icon} text-sm sm:text-lg my-auto"></i>` : `<span class="text-lg sm:text-2xl font-black my-auto">${card.label}</span>`;
 
                 cardDiv.innerHTML = `
-                    <div class="w-full text-left font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                    <div class="w-full text-left font-black text-[9px] sm:text-[10px] opacity-90 truncate">${card.label}</div>
                     ${innerIcon}
-                    <div class="w-full text-right font-black text-[10px] sm:text-xs opacity-90">${card.label}</div>
+                    <div class="w-full text-right font-black text-[9px] sm:text-[10px] opacity-90 truncate">${card.label}</div>
                 `;
 
                 if (isMyTurn) {
@@ -1026,7 +1212,6 @@
         }
 
         function showLobbyModal() {
-            // 退回大厅时清理上一局留下的 AI 玩家，恢复干净的真人房间状态
             if (currentMode === 'online') {
                 players = players.filter(p => !p.isAI);
                 players.forEach((p, idx) => p.id = idx);
