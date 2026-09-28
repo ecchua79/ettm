@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>奇幻迷宫 (The Amazing Labyrinth)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Noto+Serif+SC:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Serif SC', sans-serif;
+            background-color: #0d1117;
+            background-image: 
+                radial-gradient(at 20% 20%, rgba(88, 28, 135, 0.25) 0px, transparent 50%),
+                radial-gradient(at 80% 80%, rgba(30, 58, 138, 0.25) 0px, transparent 50%);
+            min-height: 100vh;
+            color: #f3f4f6;
+            touch-action: manipulation;
+        }
+
+        .font-cinzel {
+            font-family: 'Cinzel', 'Noto Serif SC', serif;
+        }
+
+        /* Tile styles */
+        .tile-path {
+            background-color: #d97706; /* Amber path */
+        }
+        .tile-wall {
+            background-color: #374151; /* Dark wall */
+        }
+
+        .tile-bg {
+            background: radial-gradient(circle at center, #262c36 0%, #151921 100%);
+            border: 1px solid #374151;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        /* Board grid rendering */
+        .labyrinth-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            grid-template-rows: repeat(7, minmax(0, 1fr));
+            gap: 2px;
+            background-color: #111827;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(217, 119, 6, 0.3);
+        }
+
+        .push-arrow {
+            transition: all 0.2s ease;
+        }
+        .push-arrow:hover {
+            transform: scale(1.15);
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.8));
+        }
+
+        /* Highlight reachable tiles */
+        .tile-reachable {
+            position: relative;
+            cursor: pointer;
+        }
+        .tile-reachable::after {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            border: 2px dashed #10b981;
+            border-radius: 6px;
+            animation: pulse-border 1.5s infinite;
+            pointer-events: none;
+            background-color: rgba(16, 185, 129, 0.15);
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.9; }
+        }
+
+        /* Pawn styling */
+        .pawn {
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen justify-between text-gray-100 selection:bg-amber-500 selection:text-black overflow-x-hidden">
+
+    <!-- Top Bar -->
+    <header class="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-dungeon"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold font-cinzel tracking-wider text-amber-400">奇幻迷宫</h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">The Amazing Labyrinth</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="btn-sound" onclick="toggleSound()" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="开关音效">
+                    <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button onclick="openRulesModal()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium flex items-center space-x-1 transition">
+                    <i class="fa-solid fa-circle-question text-amber-400"></i>
+                    <span class="hidden sm:inline">游戏规则</span>
+                </button>
+                <button onclick="openNewGameModal()" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-semibold text-sm shadow-md transition flex items-center space-x-1">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>新对局</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-6xl mx-auto w-full p-2 sm:p-4 md:p-6 flex-1 flex flex-col lg:flex-row gap-6 items-start justify-center">
+
+        <!-- Left / Top Panel: Player Info & Control Dock -->
+        <aside class="w-full lg:w-80 flex flex-col gap-4">
+            <!-- Current Player Status -->
+            <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur">
+                <h2 class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center justify-between">
+                    <span>当前回合</span>
+                    <span id="turn-phase-badge" class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30">推牌阶段</span>
+                </h2>
+                
+                <div id="active-player-card" class="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center space-x-3 mb-4 transition-all">
+                    <div id="active-player-avatar" class="w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg border-2 border-white/20">
+                        🧙‍♂️
+                    </div>
+                    <div>
+                        <div id="active-player-name" class="font-bold text-lg text-amber-300">玩家 1</div>
+                        <div class="text-xs text-slate-400 flex items-center space-x-1">
+                            <span>宝物进度:</span>
+                            <span id="active-player-progress" class="font-bold text-amber-400">0 / 4</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Target Treasure -->
+                <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div id="target-treasure-icon" class="w-10 h-10 rounded-lg bg-amber-950/40 border border-amber-600/30 flex items-center justify-center text-2xl">
+                            💎
+                        </div>
+                        <div>
+                            <div class="text-[11px] text-slate-400 uppercase tracking-wider">寻宝目标</div>
+                            <div id="target-treasure-name" class="text-sm font-semibold text-slate-200">蓝宝石</div>
+                        </div>
+                    </div>
+                    <div id="target-status" class="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+                        需寻找
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spare Tile Control -->
+            <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col items-center">
+                <h2 class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 w-full text-left flex justify-between items-center">
+                    <span>剩余滑动迷宫块</span>
+                    <span class="text-[11px] text-slate-500">点击旋转</span>
+                </h2>
+
+                <div class="relative group my-2">
+                    <!-- Spare Tile Display Canvas -->
+                    <div id="spare-tile-container" class="w-28 h-28 rounded-xl tile-bg p-2 flex items-center justify-center border-2 border-amber-500/50 shadow-2xl transition-transform duration-300 cursor-pointer hover:scale-105" onclick="rotateSpareTile(1)">
+                        <canvas id="spare-tile-canvas" width="100" height="100" class="w-full h-full rounded-lg"></canvas>
+                    </div>
+                </div>
+
+                <!-- Rotate Controls -->
+                <div class="flex items-center space-x-3 w-full mt-3">
+                    <button onclick="rotateSpareTile(-1)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-xl text-sm font-medium transition flex items-center justify-center space-x-1.5 text-slate-200">
+                        <i class="fa-solid fa-rotate-left text-amber-400"></i>
+                        <span>逆时针</span>
+                    </button>
+                    <button onclick="rotateSpareTile(1)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-xl text-sm font-medium transition flex items-center justify-center space-x-1.5 text-slate-200">
+                        <span>顺时针</span>
+                        <i class="fa-solid fa-rotate-right text-amber-400"></i>
+                    </button>
+                </div>
+                <p id="push-instruction" class="text-xs text-amber-400/90 mt-3 text-center bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20 w-full">
+                    👈 请点击棋盘四周的黄色箭头，将迷宫块推进去！
+                </p>
+            </div>
+
+            <!-- Player List Overview -->
+            <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur">
+                <h2 class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">玩家排名榜</h2>
+                <div id="player-list-container" class="space-y-2">
+                    <!-- Player status items injected dynamically -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right / Center Area: Board & Push Arrows -->
+        <section class="flex-1 flex flex-col items-center justify-center w-full max-w-[620px] mx-auto">
+            <div class="relative p-6 sm:p-8 bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl w-full aspect-square flex items-center justify-center">
+                
+                <!-- TOP PUSH ARROWS (Cols 1, 3, 5) -->
+                <div class="absolute top-1 left-[14.28%] right-[14.28%] flex justify-around pointer-events-auto">
+                    <button onclick="pushTile('top', 1)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向下推进第2列"><i class="fa-solid fa-circle-chevron-down"></i></button>
+                    <button onclick="pushTile('top', 3)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向下推进第4列"><i class="fa-solid fa-circle-chevron-down"></i></button>
+                    <button onclick="pushTile('top', 5)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向下推进第6列"><i class="fa-solid fa-circle-chevron-down"></i></button>
+                </div>
+
+                <!-- BOTTOM PUSH ARROWS (Cols 1, 3, 5) -->
+                <div class="absolute bottom-1 left-[14.28%] right-[14.28%] flex justify-around pointer-events-auto">
+                    <button onclick="pushTile('bottom', 1)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向上推进第2列"><i class="fa-solid fa-circle-chevron-up"></i></button>
+                    <button onclick="pushTile('bottom', 3)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向上推进第4列"><i class="fa-solid fa-circle-chevron-up"></i></button>
+                    <button onclick="pushTile('bottom', 5)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向上推进第6列"><i class="fa-solid fa-circle-chevron-up"></i></button>
+                </div>
+
+                <!-- LEFT PUSH ARROWS (Rows 1, 3, 5) -->
+                <div class="absolute left-1 top-[14.28%] bottom-[14.28%] flex flex-col justify-around pointer-events-auto">
+                    <button onclick="pushTile('left', 1)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向右推进第2行"><i class="fa-solid fa-circle-chevron-right"></i></button>
+                    <button onclick="pushTile('left', 3)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向右推进第4行"><i class="fa-solid fa-circle-chevron-right"></i></button>
+                    <button onclick="pushTile('left', 5)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向右推进第6行"><i class="fa-solid fa-circle-chevron-right"></i></button>
+                </div>
+
+                <!-- RIGHT PUSH ARROWS (Rows 1, 3, 5) -->
+                <div class="absolute right-1 top-[14.28%] bottom-[14.28%] flex flex-col justify-around pointer-events-auto">
+                    <button onclick="pushTile('right', 1)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向左推进第2行"><i class="fa-solid fa-circle-chevron-left"></i></button>
+                    <button onclick="pushTile('right', 3)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向左推进第4行"><i class="fa-solid fa-circle-chevron-left"></i></button>
+                    <button onclick="pushTile('right', 5)" class="push-arrow text-amber-400 hover:text-amber-300 p-1 text-lg sm:text-2xl" title="向左推进第6行"><i class="fa-solid fa-circle-chevron-left"></i></button>
+                </div>
+
+                <!-- 7x7 Game Board Container -->
+                <div id="labyrinth-board" class="labyrinth-grid w-full h-full relative">
+                    <!-- Dynamic Tiles injected here -->
+                </div>
+            </div>
+
+            <!-- Action Prompt Bar -->
+            <div id="status-message-bar" class="w-full mt-4 bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-center text-sm font-medium text-slate-300 backdrop-blur shadow-lg">
+                轮到 <span class="text-amber-400 font-bold" id="msg-player-name">玩家 1</span> 推入迷宫块。
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full border-t border-slate-800/80 py-3 text-center text-xs text-slate-500">
+        奇幻迷宫 (Labyrinth) &copy; 基于经典同名桌游设计 HTML5 互动版本
+    </footer>
+
+    <!-- MODAL: New Game Setup -->
+    <div id="modal-new-game" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
+            <h3 class="text-xl font-bold font-cinzel text-amber-400 mb-4 flex items-center space-x-2">
+                <i class="fa-solid fa-gamepad"></i>
+                <span>开始新局</span>
+            </h3>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-medium">游戏模式</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" id="mode-single" onclick="selectGameMode('single')" class="p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left transition hover:bg-amber-500/20">
+                            <div class="font-bold text-amber-300 text-sm flex items-center space-x-1.5">
+                                <span>🤖 单人对战 AI</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-1">与 1-3 名 AI 电脑对决</div>
+                        </button>
+                        <button type="button" id="mode-multi" onclick="selectGameMode('multi')" class="p-3 border border-slate-700 bg-slate-800 rounded-xl text-left transition hover:bg-slate-700">
+                            <div class="font-bold text-slate-200 text-sm flex items-center space-x-1.5">
+                                <span>👥 本地多人在线</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-1">2-4 名玩家轮流同屏对战</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-medium">玩家人数</label>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="setPlayerCount(2)" id="pc-2" class="flex-1 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-sm">2 人</button>
+                        <button onclick="setPlayerCount(3)" id="pc-3" class="flex-1 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700">3 人</button>
+                        <button onclick="setPlayerCount(4)" id="pc-4" class="flex-1 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700">4 人</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-medium">每人目标宝物数量</label>
+                    <select id="select-treasure-count" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-slate-200 text-sm focus:outline-none focus:border-amber-500">
+                        <option value="3">3 个宝物 (快速模式)</option>
+                        <option value="4" selected>4 个宝物 (标准模式)</option>
+                        <option value="6">6 个宝物 (挑战模式)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-6 flex space-x-3">
+                <button onclick="closeNewGameModal()" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-sm font-semibold transition">取消</button>
+                <button onclick="startNewGame()" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm shadow-lg transition">开始游戏</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Rules -->
+    <div id="modal-rules" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-xl font-bold font-cinzel text-amber-400 flex items-center space-x-2">
+                    <i class="fa-solid fa-scroll"></i>
+                    <span>迷宫规则与玩法指南</span>
+                </h3>
+                <button onclick="closeRulesModal()" class="text-slate-400 hover:text-slate-200 text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="overflow-y-auto py-4 space-y-4 text-slate-300 text-sm leading-relaxed pr-2">
+                <section>
+                    <h4 class="font-bold text-amber-300 mb-1">🎯 游戏目标</h4>
+                    <p>每位玩家都有各自的秘密寻宝清单。最快找到自己清单上的所有宝物，并**返回各自初始起点**的玩家获得胜利！</p>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-amber-300 mb-1">🔄 每回合的 2 个阶段</h4>
+                    <ol class="list-decimal list-inside space-y-2">
+                        <li>
+                            <strong class="text-amber-400">推牌阶段（必须执行）：</strong>
+                            <p class="pl-5 text-slate-400 text-xs">先旋转左侧的【剩余迷宫块】，然后点击棋盘边缘的黄色箭头，将其推进棋盘。被挤出的迷宫块将成为下一位的剩余块。（注意：不能立刻把迷宫块推回上一步挤出的同一条通道）</p>
+                        </li>
+                        <li>
+                            <strong class="text-amber-400">移动阶段：</strong>
+                            <p class="pl-5 text-slate-400 text-xs">推牌后，连通的通道会被高亮显示（绿框）。点击任意可通过的格子，你的探险者就会移动过去。如果刚好停在当前寻宝目标上，即可成功收集该宝物！</p>
+                        </li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-amber-300 mb-1">💡 巧妙提示</h4>
+                    <p class="text-slate-400 text-xs">不仅要为自己创造道路，还可以利用推牌来切断对手的通道，或者将对手推向地图的另一端！被推到棋盘外的棋子会自动被转移到新推入的这一端。</p>
+                </section>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800 text-right">
+                <button onclick="closeRulesModal()" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm transition">明白啦！</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Victory -->
+    <div id="modal-victory" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border-2 border-amber-500 rounded-3xl max-w-md w-full p-8 shadow-2xl text-center transform transition-all animate-bounce-short">
+            <div class="w-20 h-20 mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-4xl text-amber-400 mb-4 shadow-lg shadow-amber-500/30">
+                🏆
+            </div>
+            <h2 class="text-2xl font-bold font-cinzel text-amber-300 mb-1">探险胜利！</h2>
+            <p id="winner-announcement" class="text-slate-300 text-base font-medium mb-6">玩家 1 率先收集了所有宝物并重返起点！</p>
+
+            <button onclick="closeVictoryModal(); openNewGameModal();" class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl shadow-lg transition">再来一局</button>
+        </div>
+    </div>
+
+    <script>
+        /* ==========================================================================
+           GAME STATE & CONSTANTS
+           ========================================================================== */
+        
+        // Treasures list (24 unique items)
+        const TREASURES = [
+            { id: 1, name: "皇冠", icon: "👑" },
+            { id: 2, name: "蓝宝石", icon: "💎" },
+            { id: 3, name: "魔法古卷", icon: "📜" },
+            { id: 4, name: "骑士之剑", icon: "🗡️" },
+            { id: 5, name: "炼金药水", icon: "🧪" },
+            { id: 6, name: "黄金钥匙", icon: "🔑" },
+            { id: 7, name: "荣誉奖杯", icon: "🏆" },
+            { id: 8, name: "水晶魔球", icon: "🔮" },
+            { id: 9, name: "圣光盾牌", icon: "🛡️" },
+            { id: 10, name: "红宝石戒", icon: "💍" },
+            { id: 11, name: "古典烛台", icon: "🕯️" },
+            { id: 12, name: "远古神像", icon: "🗿" },
+            { id: 13, name: "神秘花瓶", icon: "🏺" },
+            { id: 14, name: "戏剧面具", icon: "🎭" },
+            { id: 15, name: "航海指南", icon: "🧭" },
+            { id: 16, name: "精灵长弓", icon: "🏹" },
+            { id: 17, name: "波塞冬叉", icon: "🔱" },
+            { id: 18, name: "龙之逆鳞", icon: "🐉" },
+            { id: 19, name: "金币大袋", icon: "🪙" },
+            { id: 20, name: "定时炸弹", icon: "💣" },
+            { id: 21, name: "幸运硬币", icon: "🪙" },
+            { id: 22, name: "魔法戒指", icon: "💍" },
+            { id: 23, name: "圣杯", icon: "🍷" },
+            { id: 24, name: "黄金骷髅", icon: "💀" }
+        ];
+
+        // Player configurations
+        const PLAYER_CONFIGS = [
+            { id: 0, name: "玩家 1 (红)", avatar: "🧙‍♂️", color: "#ef4444", bgClass: "bg-red-500", startPos: { r: 0, c: 0 } },
+            { id: 1, name: "玩家 2 (蓝)", avatar: "🧝‍♀️", color: "#3b82f6", bgClass: "bg-blue-500", startPos: { r: 0, c: 6 } },
+            { id: 2, name: "玩家 3 (绿)", avatar: "矮人探险家", avatarIcon: "🧔", color: "#10b981", bgClass: "bg-emerald-500", startPos: { r: 6, c: 6 } },
+            { id: 3, name: "玩家 4 (黄)", avatar: "游侠", avatarIcon: "🏹", color: "#f59e0b", bgClass: "bg-amber-500", startPos: { r: 6, c: 0 } }
+        ];
+
+        /* 
+           Tile Types & Directions: [Top, Right, Bottom, Left]
+           - 'I': Straight path [true, false, true, false]
+           - 'L': Corner path [true, true, false, false]
+           - 'T': T-Junction [true, true, false, true]
+        */
+        const TILE_SHAPES = {
+            'I': [true, false, true, false],
+            'L': [true, true, false, false],
+            'T': [true, true, false, true]
+        };
+
+        let gameState = {
+            gameMode: 'single', // 'single' or 'multi'
+            playerCount: 2,
+            treasuresPerPlayer: 4,
+            board: [], // 7x7 grid
+            spareTile: null, // The tile currently outside
+            players: [],
+            currentPlayerIndex: 0,
+            phase: 'PUSH', // 'PUSH' or 'MOVE'
+            lastPush: null, // To prevent immediate pushback
+            reachableTiles: [], // Cache of reachable coords
+            soundEnabled: true
+        };
+
+        // Web Audio API Sound Generator
+        let audioCtx = null;
+
+        function playSound(type) {
+            if (!gameState.soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'push') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(300, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'treasure') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'rotate') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(200, now + 0.08);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'win') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(554.37, now + 0.15);
+                    osc.frequency.setValueAtTime(659.25, now + 0.3);
+                    osc.frequency.setValueAtTime(880, now + 0.45);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.7);
+                    osc.start(now);
+                    osc.stop(now + 0.7);
+                }
+            } catch(e) {
+                console.error("Audio error", e);
+            }
+        }
+
+        function toggleSound() {
+            gameState.soundEnabled = !gameState.soundEnabled;
+            const icon = document.getElementById('sound-icon');
+            if (gameState.soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high';
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+            }
+        }
+
+        /**
+         * Rotates a direction array [N, E, S, W] by rotation deg (0, 1, 2, 3 where deg = times * 90deg)
+         */
+        function rotateDirs(dirs, rot) {
+            const result = [...dirs];
+            const r = ((rot % 4) + 4) % 4;
+            for (let i = 0; i < r; i++) {
+                const last = result.pop();
+                result.unshift(last);
+            }
+            return result;
+        }
+
+        /**
+         * Initialize fresh board state according to rules
+         */
+        function initBoard() {
+            // 16 Fixed Tiles in 7x7 grid (even row & col intersections)
+            // (0,0), (0,2), (0,4), (0,6), (2,0), (2,2)...
+            const fixedTileSpecs = {
+                "0,0": { shape: 'L', rot: 1, treasure: null }, // Corner Top-Left
+                "0,2": { shape: 'T', rot: 2, treasure: 1 },
+                "0,4": { shape: 'T', rot: 2, treasure: 2 },
+                "0,6": { shape: 'L', rot: 2, treasure: null }, // Corner Top-Right
+                "2,0": { shape: 'T', rot: 1, treasure: 3 },
+                "2,2": { shape: 'T', rot: 1, treasure: 4 },
+                "2,4": { shape: 'T', rot: 2, treasure: 5 },
+                "2,6": { shape: 'T', rot: 3, treasure: 6 },
+                "4,0": { shape: 'T', rot: 1, treasure: 7 },
+                "4,2": { shape: 'T', rot: 0, treasure: 8 },
+                "4,4": { shape: 'T', rot: 3, treasure: 9 },
+                "4,6": { shape: 'T', rot: 3, treasure: 10 },
+                "6,0": { shape: 'L', rot: 0, treasure: null }, // Corner Bottom-Left
+                "6,2": { shape: 'T', rot: 0, treasure: 11 },
+                "6,4": { shape: 'T', rot: 0, treasure: 12 },
+                "6,6": { shape: 'L', rot: 3, treasure: null }  // Corner Bottom-Right
+            };
+
+            // 34 Floating Tiles: 12 'I', 16 'L', 6 'T'
+            let floatingList = [];
+            for (let i = 0; i < 12; i++) floatingList.push({ shape: 'I' });
+            for (let i = 0; i < 16; i++) floatingList.push({ shape: 'L' });
+            for (let i = 0; i < 6; i++)  floatingList.push({ shape: 'T' });
+
+            // Assign remaining treasures (13 to 24) to some floating tiles
+            let treasureIdCounter = 13;
+            floatingList.forEach(tile => {
+                if (treasureIdCounter <= 24 && Math.random() > 0.3) {
+                    tile.treasure = treasureIdCounter++;
+                } else {
+                    tile.treasure = null;
+                }
+            });
+
+            // Shuffle floating tiles
+            for (let i = floatingList.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [floatingList[i], floatingList[j]] = [floatingList[j], floatingList[i]];
+            }
+
+            // Build 7x7 board grid
+            const grid = Array(7).fill(null).map(() => Array(7).fill(null));
+
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    const key = `${r},${c}`;
+                    if (fixedTileSpecs[key]) {
+                        const spec = fixedTileSpecs[key];
+                        grid[r][c] = {
+                            fixed: true,
+                            shape: spec.shape,
+                            rot: spec.rot,
+                            treasure: spec.treasure
+                        };
+                    } else {
+                        const tileSpec = floatingList.pop();
+                        grid[r][c] = {
+                            fixed: false,
+                            shape: tileSpec.shape,
+                            rot: Math.floor(Math.random() * 4),
+                            treasure: tileSpec.treasure
+                        };
+                    }
+                }
+            }
+
+            // The 1 leftover tile becomes the spare tile
+            const spareSpec = floatingList.pop() || { shape: 'L', treasure: null };
+            gameState.spareTile = {
+                shape: spareSpec.shape,
+                rot: Math.floor(Math.random() * 4),
+                treasure: spareSpec.treasure
+            };
+
+            gameState.board = grid;
+        }
+
+        function initPlayers() {
+            // Collect all available treasures on the board
+            let allBoardTreasures = [];
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    if (gameState.board[r][c].treasure) {
+                        allBoardTreasures.push(gameState.board[r][c].treasure);
+                    }
+                }
+            }
+            if (gameState.spareTile.treasure) {
+                allBoardTreasures.push(gameState.spareTile.treasure);
+            }
+
+            // Shuffle treasures
+            for (let i = allBoardTreasures.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [allBoardTreasures[i], allBoardTreasures[j]] = [allBoardTreasures[j], allBoardTreasures[i]];
+            }
+
+            gameState.players = [];
+            for (let i = 0; i < gameState.playerCount; i++) {
+                const conf = PLAYER_CONFIGS[i];
+                const isAI = (gameState.gameMode === 'single' && i > 0);
+                
+                // Assign target treasures to player
+                const playerTreasures = [];
+                for (let k = 0; k < gameState.treasuresPerPlayer; k++) {
+                    if (allBoardTreasures.length > 0) {
+                        playerTreasures.push(allBoardTreasures.pop());
+                    }
+                }
+
+                gameState.players.push({
+                    id: conf.id,
+                    name: isAI ? `电脑 AI ${i}` : conf.name,
+                    isAI: isAI,
+                    avatar: conf.avatar || conf.avatarIcon,
+                    color: conf.color,
+                    bgClass: conf.bgClass,
+                    startPos: { ...conf.startPos },
+                    pos: { ...conf.startPos },
+                    treasures: playerTreasures,
+                    collectedCount: 0,
+                    targetIndex: 0,
+                    finished: false
+                });
+            }
+
+            gameState.currentPlayerIndex = 0;
+            gameState.phase = 'PUSH';
+            gameState.lastPush = null;
+        }
+
+        /**
+         * Render individual tile on canvas element
+         */
+        function drawTileCanvas(canvas, tile) {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Background
+            ctx.fillStyle = '#1e2430';
+            ctx.fillRect(0, 0, w, h);
+
+            // Calculate connected paths based on shape and rotation
+            const baseDirs = TILE_SHAPES[tile.shape];
+            const dirs = rotateDirs(baseDirs, tile.rot); // [Top, Right, Bottom, Left]
+
+            const pathWidth = w * 0.38;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Draw Paths
+            ctx.fillStyle = '#d97706'; // Amber path color
+            
+            // Center hub
+            ctx.fillRect(cx - pathWidth/2, cy - pathWidth/2, pathWidth, pathWidth);
+
+            // Branches
+            if (dirs[0]) ctx.fillRect(cx - pathWidth/2, 0, pathWidth, cy); // Top
+            if (dirs[1]) ctx.fillRect(cx, cy - pathWidth/2, cx, pathWidth); // Right
+            if (dirs[2]) ctx.fillRect(cx - pathWidth/2, cy, pathWidth, cy); // Bottom
+            if (dirs[3]) ctx.fillRect(0, cy - pathWidth/2, cx, pathWidth); // Left
+
+            // Draw subtle wall textures
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(0, 0, w, h);
+
+            // Draw Treasure icon if present
+            if (tile.treasure) {
+                const tr = TREASURES.find(t => t.id === tile.treasure);
+                if (tr) {
+                    ctx.font = `${Math.floor(w * 0.35)}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(tr.icon, cx, cy);
+                }
+            }
+        }
+
+        function renderBoard() {
+            const boardEl = document.getElementById('labyrinth-board');
+            boardEl.innerHTML = '';
+
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    const tile = gameState.board[r][c];
+                    
+                    const tileDiv = document.createElement('div');
+                    tileDiv.className = 'relative w-full h-full tile-bg rounded-lg overflow-hidden flex items-center justify-center transition-all duration-200';
+                    tileDiv.dataset.row = r;
+                    tileDiv.dataset.col = c;
+
+                    // Check if tile is reachable in MOVE phase
+                    const isReachable = gameState.phase === 'MOVE' && 
+                                        gameState.reachableTiles.some(pos => pos.r === r && pos.c === c);
+                    
+                    if (isReachable) {
+                        tileDiv.classList.add('tile-reachable');
+                        tileDiv.onclick = () => onTileClick(r, c);
+                    }
+
+                    // Create Canvas for smooth path rendering
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 80;
+                    canvas.height = 80;
+                    canvas.className = 'w-full h-full pointer-events-none';
+                    drawTileCanvas(canvas, tile);
+                    tileDiv.appendChild(canvas);
+
+                    // Render Pawns/Players on this tile
+                    const playersHere = gameState.players.filter(p => p.pos.r === r && p.pos.c === c);
+                    if (playersHere.length > 0) {
+                        const pawnContainer = document.createElement('div');
+                        pawnContainer.className = 'absolute inset-0 flex items-center justify-center gap-1 flex-wrap p-1 pointer-events-none z-10';
+                        
+                        playersHere.forEach(p => {
+                            const pawn = document.createElement('div');
+                            pawn.className = `pawn w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-lg border-2 border-white/80 ${p.bgClass}`;
+                            pawn.title = p.name;
+                            pawn.innerText = p.id + 1;
+                            
+                            // Highlight active player's pawn
+                            if (p.id === gameState.players[gameState.currentPlayerIndex].id) {
+                                pawn.classList.add('ring-4', 'ring-amber-300', 'scale-110');
+                            }
+                            pawnContainer.appendChild(pawn);
+                        });
+                        tileDiv.appendChild(pawnContainer);
+                    }
+
+                    // Render Starting Base Marker if tile is a player's home base
+                    gameState.players.forEach(p => {
+                        if (p.startPos.r === r && p.startPos.c === c) {
+                            const homeMarker = document.createElement('div');
+                            homeMarker.className = 'absolute top-0.5 left-0.5 text-[9px] px-1 bg-slate-900/80 rounded border border-slate-700 font-bold';
+                            homeMarker.style.color = p.color;
+                            homeMarker.innerText = `P${p.id + 1}起点`;
+                            tileDiv.appendChild(homeMarker);
+                        }
+                    });
+
+                    boardEl.appendChild(tileDiv);
+                }
+            }
+
+            // Render Spare Tile Control Canvas
+            const spareCanvas = document.getElementById('spare-tile-canvas');
+            if (spareCanvas && gameState.spareTile) {
+                drawTileCanvas(spareCanvas, gameState.spareTile);
+            }
+
+            // Update UI Sidebar info
+            updateUIInfo();
+        }
+
+        function updateUIInfo() {
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            
+            // Badge & instruction updates
+            const badge = document.getElementById('turn-phase-badge');
+            const instruction = document.getElementById('push-instruction');
+            const msgName = document.getElementById('msg-player-name');
+
+            msgName.innerText = curPlayer.name;
+            msgName.style.color = curPlayer.color;
+
+            if (gameState.phase === 'PUSH') {
+                badge.innerText = "推牌阶段";
+                badge.className = "px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                instruction.innerHTML = "👈 请旋转迷宫块，然后点击边缘的黄色箭头推进去！";
+            } else {
+                badge.innerText = "移动阶段";
+                badge.className = "px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                instruction.innerHTML = "🏃‍♂️ 迷宫通道已连通，点击高亮绿框格子移动你的棋子！";
+            }
+
+            // Active player card
+            document.getElementById('active-player-name').innerText = curPlayer.name;
+            document.getElementById('active-player-name').style.color = curPlayer.color;
+            document.getElementById('active-player-avatar').innerText = curPlayer.avatar;
+            document.getElementById('active-player-progress').innerText = `${curPlayer.collectedCount} / ${curPlayer.treasures.length}`;
+
+            // Target Treasure display
+            const targetIcon = document.getElementById('target-treasure-icon');
+            const targetName = document.getElementById('target-treasure-name');
+            const targetStatus = document.getElementById('target-status');
+
+            if (curPlayer.targetIndex < curPlayer.treasures.length) {
+                const trId = curPlayer.treasures[curPlayer.targetIndex];
+                const tr = TREASURES.find(t => t.id === trId);
+                targetIcon.innerText = tr ? tr.icon : '❓';
+                targetName.innerText = tr ? tr.name : '未知宝物';
+                targetStatus.innerText = "需寻找";
+                targetStatus.className = "text-xs text-amber-400 font-medium bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20";
+            } else {
+                // All treasures collected, return to starting home!
+                targetIcon.innerText = '🏠';
+                targetName.innerText = '返回初始起点';
+                targetStatus.innerText = "回家获胜";
+                targetStatus.className = "text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20";
+            }
+
+            // Render Player List Sidebar
+            const playerListContainer = document.getElementById('player-list-container');
+            playerListContainer.innerHTML = '';
+
+            gameState.players.forEach((p, idx) => {
+                const item = document.createElement('div');
+                const isCurrent = idx === gameState.currentPlayerIndex;
+                item.className = `p-2.5 rounded-xl border flex items-center justify-between transition ${
+                    isCurrent ? 'bg-slate-800 border-amber-500/60 shadow-md' : 'bg-slate-950/40 border-slate-800/80'
+                }`;
+
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${p.bgClass}">
+                            ${p.id + 1}
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">${p.name}</div>
+                            <div class="text-[10px] text-slate-400">已收集: ${p.collectedCount}/${p.treasures.length}</div>
+                        </div>
+                    </div>
+                    ${isCurrent ? '<span class="text-xs text-amber-400 font-bold"><i class="fa-solid fa-play"></i></span>' : ''}
+                `;
+                playerListContainer.appendChild(item);
+            });
+        }
+
+        function rotateSpareTile(direction) {
+            playSound('rotate');
+            gameState.spareTile.rot = ((gameState.spareTile.rot + direction) % 4 + 4) % 4;
+            const spareCanvas = document.getElementById('spare-tile-canvas');
+            if (spareCanvas) {
+                drawTileCanvas(spareCanvas, gameState.spareTile);
+            }
+        }
+
+        /**
+         * Push spare tile into a row or column
+         */
+        function pushTile(direction, index) {
+            if (gameState.phase !== 'PUSH') return;
+
+            // Prevent immediate pushback (inverse of last push)
+            if (gameState.lastPush) {
+                const lp = gameState.lastPush;
+                if (lp.index === index) {
+                    if ((direction === 'top' && lp.direction === 'bottom') ||
+                        (direction === 'bottom' && lp.direction === 'top') ||
+                        (direction === 'left' && lp.direction === 'right') ||
+                        (direction === 'right' && lp.direction === 'left')) {
+                        playSound('click');
+                        showStatusMessage("⚠️ 不能立即将迷宫块原路推回！请选择其他箭头。");
+                        return;
+                    }
+                }
+            }
+
+            playSound('push');
+
+            let pushedOutTile = null;
+
+            if (direction === 'top') {
+                // Push down col index
+                pushedOutTile = gameState.board[6][index];
+                for (let r = 6; r > 0; r--) {
+                    gameState.board[r][index] = gameState.board[r - 1][index];
+                }
+                gameState.board[0][index] = { ...gameState.spareTile };
+
+                // Shift players on this column
+                gameState.players.forEach(p => {
+                    if (p.pos.c === index) {
+                        p.pos.r += 1;
+                        if (p.pos.r > 6) p.pos.r = 0; // Wrap around to newly inserted tile
+                    }
+                });
+
+            } else if (direction === 'bottom') {
+                // Push up col index
+                pushedOutTile = gameState.board[0][index];
+                for (let r = 0; r < 6; r++) {
+                    gameState.board[r][index] = gameState.board[r + 1][index];
+                }
+                gameState.board[6][index] = { ...gameState.spareTile };
+
+                // Shift players
+                gameState.players.forEach(p => {
+                    if (p.pos.c === index) {
+                        p.pos.r -= 1;
+                        if (p.pos.r < 0) p.pos.r = 6;
+                    }
+                });
+
+            } else if (direction === 'left') {
+                // Push right row index
+                pushedOutTile = gameState.board[index][6];
+                for (let c = 6; c > 0; c--) {
+                    gameState.board[index][c] = gameState.board[index][c - 1];
+                }
+                gameState.board[index][0] = { ...gameState.spareTile };
+
+                // Shift players
+                gameState.players.forEach(p => {
+                    if (p.pos.r === index) {
+                        p.pos.c += 1;
+                        if (p.pos.c > 6) p.pos.c = 0;
+                    }
+                });
+
+            } else if (direction === 'right') {
+                // Push left row index
+                pushedOutTile = gameState.board[index][0];
+                for (let c = 0; c < 6; c++) {
+                    gameState.board[index][c] = gameState.board[index][c + 1];
+                }
+                gameState.board[index][6] = { ...gameState.spareTile };
+
+                // Shift players
+                gameState.players.forEach(p => {
+                    if (p.pos.r === index) {
+                        p.pos.c -= 1;
+                        if (p.pos.c < 0) p.pos.c = 6;
+                    }
+                });
+            }
+
+            // Update spare tile with pushed out tile
+            gameState.spareTile = { ...pushedOutTile };
+
+            // Record last push to prevent inverse
+            gameState.lastPush = { direction, index };
+
+            // Transition turn phase to MOVE
+            gameState.phase = 'MOVE';
+
+            // Calculate reachable tiles for current player
+            calculateReachableTiles();
+
+            renderBoard();
+
+            // If current player is AI, trigger AI move automatically
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            if (curPlayer.isAI) {
+                setTimeout(handleAIMove, 600);
+            }
+        }
+
+        /**
+         * Check if two adjacent cells have connecting open pathways
+         */
+        function canPassBetween(r1, c1, r2, c2) {
+            const tile1 = gameState.board[r1][c1];
+            const tile2 = gameState.board[r2][c2];
+
+            const dirs1 = rotateDirs(TILE_SHAPES[tile1.shape], tile1.rot); // [Top, Right, Bottom, Left]
+            const dirs2 = rotateDirs(TILE_SHAPES[tile2.shape], tile2.rot);
+
+            // r2, c2 is ABOVE r1, c1
+            if (r2 === r1 - 1 && c2 === c1) {
+                return dirs1[0] && dirs2[2];
+            }
+            // r2, c2 is BELOW r1, c1
+            if (r2 === r1 + 1 && c2 === c1) {
+                return dirs1[2] && dirs2[0];
+            }
+            // r2, c2 is RIGHT of r1, c1
+            if (r2 === r1 && c2 === c1 + 1) {
+                return dirs1[1] && dirs2[3];
+            }
+            // r2, c2 is LEFT of r1, c1
+            if (r2 === r1 && c2 === c1 - 1) {
+                return dirs1[3] && dirs2[1];
+            }
+
+            return false;
+        }
+
+        /**
+         * BFS Algorithm to calculate all reachable grid coordinates from current player position
+         */
+        function calculateReachableTiles() {
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            const start = curPlayer.pos;
+
+            const visited = Array(7).fill(null).map(() => Array(7).fill(false));
+            const queue = [start];
+            visited[start.r][start.c] = true;
+
+            const reachable = [];
+
+            while (queue.length > 0) {
+                const curr = queue.shift();
+                reachable.push(curr);
+
+                // Check 4 neighbors
+                const neighbors = [
+                    { r: curr.r - 1, c: curr.c },
+                    { r: curr.r + 1, c: curr.c },
+                    { r: curr.r, c: curr.c - 1 },
+                    { r: curr.r, c: curr.c + 1 }
+                ];
+
+                for (const n of neighbors) {
+                    if (n.r >= 0 && n.r < 7 && n.c >= 0 && n.c < 7 && !visited[n.r][n.c]) {
+                        if (canPassBetween(curr.r, curr.c, n.r, n.c)) {
+                            visited[n.r][n.c] = true;
+                            queue.push(n);
+                        }
+                    }
+                }
+            }
+
+            gameState.reachableTiles = reachable;
+        }
+
+        function onTileClick(targetR, targetC) {
+            if (gameState.phase !== 'MOVE') return;
+
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+
+            // Verify tile is reachable
+            const isReachable = gameState.reachableTiles.some(pos => pos.r === targetR && pos.c === targetC);
+            if (!isReachable) return;
+
+            // Move player pawn
+            curPlayer.pos = { r: targetR, c: targetC };
+            playSound('click');
+
+            // Check target treasure on landed tile
+            const currentTile = gameState.board[targetR][targetC];
+
+            if (curPlayer.targetIndex < curPlayer.treasures.length) {
+                const targetTreasureId = curPlayer.treasures[curPlayer.targetIndex];
+                if (currentTile.treasure === targetTreasureId) {
+                    // Treasure Collected!
+                    playSound('treasure');
+                    curPlayer.collectedCount += 1;
+                    curPlayer.targetIndex += 1;
+                    
+                    showStatusMessage(`🎉 ${curPlayer.name} 成功拿到了宝物！`);
+                }
+            } else {
+                // Checking if returned home to win
+                if (targetR === curPlayer.startPos.r && targetC === curPlayer.startPos.c) {
+                    playSound('win');
+                    triggerVictory(curPlayer);
+                    return;
+                }
+            }
+
+            // End turn & pass to next player
+            nextTurn();
+        }
+
+        function nextTurn() {
+            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+            gameState.phase = 'PUSH';
+            gameState.reachableTiles = [];
+
+            renderBoard();
+
+            // AI turn trigger
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            if (curPlayer.isAI) {
+                setTimeout(handleAIPush, 800);
+            }
+        }
+
+        function handleAIPush() {
+            if (gameState.phase !== 'PUSH') return;
+
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            const possiblePushes = [
+                { direction: 'top', index: 1 }, { direction: 'top', index: 3 }, { direction: 'top', index: 5 },
+                { direction: 'bottom', index: 1 }, { direction: 'bottom', index: 3 }, { direction: 'bottom', index: 5 },
+                { direction: 'left', index: 1 }, { direction: 'left', index: 3 }, { direction: 'left', index: 5 },
+                { direction: 'right', index: 1 }, { direction: 'right', index: 3 }, { direction: 'right', index: 5 }
+            ];
+
+            // Filter out illegal pushbacks
+            const validPushes = possiblePushes.filter(p => {
+                if (!gameState.lastPush) return true;
+                const lp = gameState.lastPush;
+                if (lp.index === p.index) {
+                    if ((p.direction === 'top' && lp.direction === 'bottom') ||
+                        (p.direction === 'bottom' && lp.direction === 'top') ||
+                        (p.direction === 'left' && lp.direction === 'right') ||
+                        (p.direction === 'right' && lp.direction === 'left')) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            // Random rotation
+            const rotCount = Math.floor(Math.random() * 4);
+            for (let i = 0; i < rotCount; i++) {
+                rotateSpareTile(1);
+            }
+
+            // Pick a random valid push
+            const chosenPush = validPushes[Math.floor(Math.random() * validPushes.length)];
+            pushTile(chosenPush.direction, chosenPush.index);
+        }
+
+        function handleAIMove() {
+            if (gameState.phase !== 'MOVE') return;
+
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            if (gameState.reachableTiles.length === 0) {
+                nextTurn();
+                return;
+            }
+
+            // Target position
+            let bestTarget = gameState.reachableTiles[0];
+
+            if (curPlayer.targetIndex < curPlayer.treasures.length) {
+                const targetTreasureId = curPlayer.treasures[curPlayer.targetIndex];
+                
+                // Find if any reachable tile has the target treasure
+                const treasureTilePos = gameState.reachableTiles.find(pos => {
+                    return gameState.board[pos.r][pos.c].treasure === targetTreasureId;
+                });
+
+                if (treasureTilePos) {
+                    bestTarget = treasureTilePos;
+                } else {
+                    // Pick a random reachable spot
+                    bestTarget = gameState.reachableTiles[Math.floor(Math.random() * gameState.reachableTiles.length)];
+                }
+            } else {
+                // Head home if reached
+                const homePos = gameState.reachableTiles.find(pos => pos.r === curPlayer.startPos.r && pos.c === curPlayer.startPos.c);
+                if (homePos) {
+                    bestTarget = homePos;
+                } else {
+                    bestTarget = gameState.reachableTiles[Math.floor(Math.random() * gameState.reachableTiles.length)];
+                }
+            }
+
+            onTileClick(bestTarget.r, bestTarget.c);
+        }
+
+        function showStatusMessage(text) {
+            const bar = document.getElementById('status-message-bar');
+            if (bar) {
+                bar.innerHTML = text;
+            }
+        }
+
+        function triggerVictory(winner) {
+            document.getElementById('winner-announcement').innerText = `恭喜 ${winner.name} 率先收集完全部宝物并安全返回起点！`;
+            document.getElementById('modal-victory').classList.remove('hidden');
+        }
+
+        function closeVictoryModal() {
+            document.getElementById('modal-victory').classList.add('hidden');
+        }
+
+        function openNewGameModal() {
+            document.getElementById('modal-new-game').classList.remove('hidden');
+        }
+
+        function closeNewGameModal() {
+            document.getElementById('modal-new-game').classList.add('hidden');
+        }
+
+        function openRulesModal() {
+            document.getElementById('modal-rules').classList.remove('hidden');
+        }
+
+        function closeRulesModal() {
+            document.getElementById('modal-rules').classList.add('hidden');
+        }
+
+        function selectGameMode(mode) {
+            gameState.gameMode = mode;
+            const singleBtn = document.getElementById('mode-single');
+            const multiBtn = document.getElementById('mode-multi');
+
+            if (mode === 'single') {
+                singleBtn.className = "p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left transition";
+                multiBtn.className = "p-3 border border-slate-700 bg-slate-800 rounded-xl text-left transition hover:bg-slate-700";
+            } else {
+                multiBtn.className = "p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left transition";
+                singleBtn.className = "p-3 border border-slate-700 bg-slate-800 rounded-xl text-left transition hover:bg-slate-700";
+            }
+        }
+
+        function setPlayerCount(count) {
+            gameState.playerCount = count;
+            [2, 3, 4].forEach(c => {
+                const btn = document.getElementById(`pc-${c}`);
+                if (c === count) {
+                    btn.className = "flex-1 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-sm shadow";
+                } else {
+                    btn.className = "flex-1 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700";
+                }
+            });
+        }
+
+        function startNewGame() {
+            const treasureSelect = document.getElementById('select-treasure-count');
+            gameState.treasuresPerPlayer = parseInt(treasureSelect.value) || 4;
+
+            closeNewGameModal();
+            initBoard();
+            initPlayers();
+            renderBoard();
+            showStatusMessage(`游戏开始！轮到 <span class="text-amber-400 font-bold">${gameState.players[0].name}</span> 推入迷宫块。`);
+        }
+
+        /* Initialize Game on Window Load */
+        window.onload = function() {
+            initBoard();
+            initPlayers();
+            renderBoard();
+        };
+    </script>
+</body>
+</html>
