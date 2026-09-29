@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>通路：生存连线 (Tsuro - Road Labyrinth)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+
+        :root {
+            box-sizing: border-box;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        html {
+            scroll-padding-top: env(safe-area-inset-top, 0px);
+        }
+        *, *::before, *::after { box-sizing: inherit; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0e14;
+            background-image: 
+                radial-gradient(circle at 50% 20%, rgba(217, 119, 6, 0.12) 0%, transparent 60%),
+                radial-gradient(circle at 80% 80%, rgba(185, 28, 28, 0.08) 0%, transparent 50%);
+            color: #f3f4f6;
+            touch-action: manipulation;
+            user-select: none;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .font-oriental {
+            font-family: 'Ma Shan Zheng', cursive, serif;
+        }
+
+        header.app-header {
+            top: env(safe-area-inset-top, 0px);
+            padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+        }
+
+        /* Board & Canvas Styling */
+        .board-container {
+            background: #151a23;
+            border: 2px solid #374151;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 0 20px rgba(0,0,0,0.8);
+            border-radius: 1rem;
+        }
+
+        #board-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            touch-action: manipulation;
+        }
+
+        .outer-port {
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+        }
+        .outer-port:hover, .outer-port:active {
+            transform: scale(1.3);
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.9));
+        }
+
+        /* Card Selection Visuals */
+        .hand-card {
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            touch-action: manipulation;
+        }
+        .hand-card:hover, .hand-card:active {
+            transform: translateY(-6px) scale(1.03);
+            border-color: #f59e0b;
+            box-shadow: 0 10px 20px rgba(245, 158, 11, 0.2);
+        }
+        .hand-card.selected {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.15);
+            box-shadow: 0 0 18px rgba(16, 185, 129, 0.4);
+            transform: translateY(-8px) scale(1.05);
+        }
+
+        /* Ensure tap targets are comfortable on touch devices */
+        button {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+        @media (max-width: 480px) {
+            .font-oriental { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black">
+
+    <!-- Top Navigation Header -->
+    <header class="app-header w-full bg-slate-900/90 border-b border-slate-800 px-3 sm:px-4 py-3 sticky z-30 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-red-600 flex items-center justify-center text-slate-950 font-bold text-lg sm:text-xl shadow-lg shadow-amber-500/20 shrink-0">
+                    <i class="fa-solid fa-route"></i>
+                </div>
+                <div class="min-w-0">
+                    <h1 class="text-lg sm:text-2xl font-bold font-oriental text-amber-400 tracking-wider truncate">通路 · 生存连线</h1>
+                    <p class="text-[10px] text-slate-400 hidden sm:block">Tsuro Path-Placing Survival Game</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+                <button id="btn-sound" onclick="toggleSound()" class="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="音效开关">
+                    <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button onclick="openRulesModal()" class="px-2.5 sm:px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-book-open text-amber-400"></i>
+                    <span class="hidden sm:inline">玩法规则</span>
+                </button>
+                <button onclick="openSetupModal()" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span class="hidden xs:inline">新开局</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Workspace -->
+    <main class="max-w-6xl mx-auto w-full p-2 sm:p-4 flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 items-center lg:items-start justify-center">
+
+        <!-- Left Column: Board Canvas Container -->
+        <section class="flex-1 flex flex-col items-center w-full max-w-[560px]">
+            <!-- Board Container -->
+            <div class="relative w-full aspect-square board-container p-2 sm:p-4 flex items-center justify-center">
+                <!-- Main Board Canvas -->
+                <canvas id="board-canvas" width="600" height="600" class="rounded-lg cursor-pointer"></canvas>
+                
+                <!-- Interactive Edge Starting Notch Overlay -->
+                <div id="start-ports-overlay" class="absolute inset-0 pointer-events-none"></div>
+            </div>
+
+            <!-- Status Indicator Bar -->
+            <div id="status-banner" class="w-full mt-3 bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-center text-xs sm:text-sm font-semibold text-slate-200 shadow-lg backdrop-blur">
+                正在加载游戏...
+            </div>
+        </section>
+
+        <!-- Right Column: Player Hand & Controls -->
+        <aside class="w-full lg:w-80 flex flex-col gap-3 sm:gap-4">
+            
+            <!-- Current Player Status Card -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs uppercase tracking-wider font-bold text-slate-400">当前行动玩家</span>
+                    <span id="game-stage-badge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">选择起点</span>
+                </div>
+
+                <div id="active-player-box" class="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center space-x-3 transition-all">
+                    <div id="active-player-avatar" class="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold shadow-lg text-white bg-amber-600 shrink-0">
+                        1
+                    </div>
+                    <div class="min-w-0">
+                        <div id="active-player-name" class="font-bold text-base text-amber-300 truncate">玩家 1</div>
+                        <div id="active-player-sub" class="text-xs text-slate-400">请点击棋盘边缘白色标记选定起点</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hand Tiles Dock -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs uppercase tracking-wider font-bold text-slate-400">你的手牌板块 (点击旋转)</span>
+                    <span id="deck-count-text" class="text-xs font-semibold text-amber-400 shrink-0">牌堆剩余: 35</span>
+                </div>
+
+                <!-- 3 Hand Cards Container -->
+                <div id="hand-cards-container" class="grid grid-cols-3 gap-2 my-2">
+                    <!-- Cards dynamically injected -->
+                </div>
+
+                <!-- Rotation & Action Buttons -->
+                <div class="flex items-center space-x-2 mt-2">
+                    <button id="btn-rotate-ccw" onclick="rotateSelectedCard(-1)" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-1 text-slate-200">
+                        <i class="fa-solid fa-rotate-left text-amber-400"></i>
+                        <span>逆时针</span>
+                    </button>
+                    <button id="btn-rotate-cw" onclick="rotateSelectedCard(1)" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-1 text-slate-200">
+                        <span>顺时针</span>
+                        <i class="fa-solid fa-rotate-right text-amber-400"></i>
+                    </button>
+                </div>
+
+                <button id="btn-confirm-place" onclick="confirmTilePlacement()" class="w-full mt-3 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-sm shadow-lg transition opacity-50 cursor-not-allowed" disabled>
+                    <i class="fa-solid fa-check"></i> 放置选中的板块
+                </button>
+            </div>
+
+            <!-- Scoreboard & Player List -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur">
+                <span class="text-xs uppercase tracking-wider font-bold text-slate-400 block mb-2">玩家生存榜</span>
+                <div id="player-status-list" class="space-y-2">
+                    <!-- Player items dynamically rendered -->
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full border-t border-slate-800/80 py-3 text-center text-xs text-slate-500">
+        《Tsuro 通路 / 生存连线》 HTML5 经典拼路桌游
+    </footer>
+
+    <!-- MODAL: Game Setup -->
+    <div id="modal-setup" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold font-oriental text-amber-400 mb-4 flex items-center space-x-2">
+                <i class="fa-solid fa-gamepad"></i>
+                <span>新建对局设置</span>
+            </h3>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">玩家人数 (2-4人)</label>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="setPlayerCount(2)" id="btn-pc-2" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm">2 人</button>
+                        <button onclick="setPlayerCount(3)" id="btn-pc-3" class="flex-1 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700">3 人</button>
+                        <button onclick="setPlayerCount(4)" id="btn-pc-4" class="flex-1 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700">4 人</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">模式设置</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="btn-mode-vs-ai" onclick="setGameMode('ai')" class="p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left">
+                            <div class="font-bold text-amber-300 text-sm">🤖 人机对战</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">与 AI 电脑玩家竞技</div>
+                        </button>
+                        <button type="button" id="btn-mode-pvp" onclick="setGameMode('pvp')" class="p-3 border border-slate-700 bg-slate-800 rounded-xl text-left hover:bg-slate-700">
+                            <div class="font-bold text-slate-200 text-sm">👥 本地多人</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">多人在同一屏幕轮流</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex space-x-3">
+                <button onclick="closeSetupModal()" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-sm font-semibold">取消</button>
+                <button onclick="startNewGame()" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold text-sm shadow-lg">开始对局</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Game Rules -->
+    <div id="modal-rules" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-lg sm:text-xl font-bold font-oriental text-amber-400 flex items-center space-x-2">
+                    <i class="fa-solid fa-scroll"></i>
+                    <span>《通路》规则解惑与玩法</span>
+                </h3>
+                <button onclick="closeRulesModal()" class="text-slate-400 hover:text-slate-200 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="overflow-y-auto py-4 space-y-4 text-slate-300 text-sm leading-relaxed pr-1">
+                <section>
+                    <h4 class="font-bold text-amber-300 mb-1">🏁 起始点选择</h4>
+                    <p class="text-xs text-slate-400">开局时，玩家轮流点击棋盘最外圈边缘的白点选定起点。棋子初始朝向棋盘内部。</p>
+                </section>
+                <section>
+                    <h4 class="font-bold text-amber-300 mb-1">🧩 铺路与顺滑移动</h4>
+                    <p class="text-xs text-slate-400">轮到你的回合，旋转并放置一张板块在你棋子<b>正前方</b>的空格。铺好路后，你的棋子（以及路径被延伸的其他玩家棋子）会顺着连通的曲率轨道<b>自动滑向最新尽头</b>！</p>
+                </section>
+                <section>
+                    <h4 class="font-bold text-red-400 mb-1">☠️ 淘汰机制与胜利条件</h4>
+                    <p class="text-xs text-slate-400">若棋子被顺滑引向<b>棋盘最外边缘以外</b>，或与<b>其他玩家棋子碰撞</b>，该玩家立即被淘汰！<b>最后一个留在棋盘上的幸存者直接获胜</b>。</p>
+                </section>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800 text-right">
+                <button onclick="closeRulesModal()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Victory Announcement -->
+    <div id="modal-victory" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border-2 border-amber-500 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl text-center">
+            <div class="w-20 h-20 mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-4xl text-amber-400 mb-4 shadow-lg shadow-amber-500/30">
+                🏆
+            </div>
+            <h2 class="text-2xl font-bold font-oriental text-amber-300 mb-1">生存之王产生！</h2>
+            <p id="victory-announcement-text" class="text-slate-300 text-sm font-medium mb-6">玩家 1 凭借高超的路线策略活到了最后！</p>
+
+            <button onclick="closeVictoryModal(); openSetupModal();" class="w-full py-3 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold rounded-xl shadow-lg">再来一局</button>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 6; // 6x6 grid
+        
+        // Player Configs (Color, Name, Avatar)
+        const PLAYER_CONFIGS = [
+            { id: 0, name: "玩家 1 (红)", color: "#ef4444", bgClass: "bg-red-500", lightColor: "#fca5a5" },
+            { id: 1, name: "玩家 2 (蓝)", color: "#3b82f6", bgClass: "bg-blue-500", lightColor: "#93c5fd" },
+            { id: 2, name: "玩家 3 (绿)", color: "#10b981", bgClass: "bg-emerald-500", lightColor: "#6ee7b7" },
+            { id: 3, name: "玩家 4 (黄)", color: "#f59e0b", bgClass: "bg-amber-500", lightColor: "#fde047" }
+        ];
+
+        /*
+           Tile Topology Definition:
+           A tile has 8 connection ports numbered 0..7
+           Top Edge: Port 0 (x: 0.33), Port 1 (x: 0.67)
+           Right Edge: Port 2 (y: 0.33), Port 3 (y: 0.67)
+           Bottom Edge: Port 4 (x: 0.67), Port 5 (x: 0.33)
+           Left Edge: Port 6 (y: 0.67), Port 7 (y: 0.33)
+        */
+        const RAW_TILE_TOPOLOGIES = [
+            [[0,1],[2,3],[4,5],[6,7]], [[0,5],[1,4],[2,7],[3,6]], [[0,4],[1,5],[2,6],[3,7]],
+            [[0,3],[1,2],[4,7],[5,6]], [[0,7],[1,2],[3,4],[5,6]], [[0,2],[1,7],[3,6],[4,5]],
+            [[0,5],[1,2],[3,4],[6,7]], [[0,1],[2,7],[3,4],[5,6]], [[0,3],[1,4],[2,5],[6,7]],
+            [[0,6],[1,7],[2,3],[4,5]], [[0,2],[1,3],[4,7],[5,6]], [[0,4],[1,2],[3,6],[5,7]],
+            [[0,7],[1,4],[2,3],[5,6]], [[0,5],[1,6],[2,7],[3,4]], [[0,3],[1,6],[2,5],[4,7]],
+            [[0,1],[2,5],[3,6],[4,7]], [[0,2],[1,5],[3,7],[4,6]], [[0,4],[1,7],[2,5],[3,6]],
+            [[0,6],[1,5],[2,4],[3,7]], [[0,3],[1,7],[2,6],[4,5]], [[0,5],[1,3],[2,7],[4,6]],
+            [[0,7],[1,3],[2,5],[4,6]], [[0,2],[1,4],[3,5],[6,7]], [[0,1],[2,6],[3,5],[4,7]],
+            [[0,4],[1,6],[2,3],[5,7]], [[0,5],[1,7],[2,3],[4,6]], [[0,3],[1,5],[2,7],[4,6]],
+            [[0,6],[1,2],[3,5],[4,7]], [[0,2],[1,6],[3,4],[5,7]], [[0,7],[1,5],[2,4],[3,6]],
+            [[0,1],[2,4],[3,7],[5,6]], [[0,3],[1,6],[2,7],[4,5]], [[0,5],[1,4],[2,6],[3,7]],
+            [[0,2],[1,7],[3,5],[4,6]], [[0,4],[1,3],[2,6],[5,7]]
+        ];
+
+        let gameState = {
+            playerCount: 2,
+            gameMode: 'ai', // 'ai' or 'pvp'
+            board: [], // 6x6 grid storing tiles or null
+            deck: [],
+            players: [],
+            currentPlayerIndex: 0,
+            stage: 'SELECT_START', // 'SELECT_START', 'PLAY', 'GAME_OVER'
+            selectedCardIndex: 0,
+            selectedCardRotation: 0,
+            animating: false,
+            soundEnabled: true
+        };
+
+        let audioCtx = null;
+
+        function playSound(type) {
+            if (!gameState.soundEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.frequency.setValueAtTime(450, now);
+                    osc.frequency.exponentialRampToValueAtTime(700, now + 0.04);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.04);
+                    osc.start(now); osc.stop(now + 0.04);
+                } else if (type === 'place') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.exponentialRampToValueAtTime(400, now + 0.12);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                    osc.start(now); osc.stop(now + 0.12);
+                } else if (type === 'slide') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.linearRampToValueAtTime(500, now + 0.25);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now); osc.stop(now + 0.25);
+                } else if (type === 'elim') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now); osc.stop(now + 0.3);
+                } else if (type === 'win') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.12);
+                    osc.frequency.setValueAtTime(783.99, now + 0.24);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                    osc.start(now); osc.stop(now + 0.5);
+                }
+            } catch(e) {}
+        }
+
+        function toggleSound() {
+            gameState.soundEnabled = !gameState.soundEnabled;
+            document.getElementById('sound-icon').className = gameState.soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-slate-500';
+        }
+
+        function createShuffledDeck() {
+            const deck = [];
+            RAW_TILE_TOPOLOGIES.forEach((topo, idx) => {
+                deck.push({ id: idx, topo: topo });
+            });
+            // Shuffle
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        /**
+         * Get current port pairing under rotation k (0..3, 90deg steps)
+         */
+        function getRotatedPaths(topo, rotation) {
+            const rotShift = (rotation % 4) * 2;
+            return topo.map(pair => {
+                const p1 = (pair[0] + rotShift) % 8;
+                const p2 = (pair[1] + rotShift) % 8;
+                return [p1, p2];
+            });
+        }
+
+        /* Port Math & Helper Coordinates */
+        function getPortOffset(port) {
+            // Returns relative [x, y] inside a tile normalized to [0..1]
+            switch(port) {
+                case 0: return { x: 0.33, y: 0 };
+                case 1: return { x: 0.67, y: 0 };
+                case 2: return { x: 1, y: 0.33 };
+                case 3: return { x: 1, y: 0.67 };
+                case 4: return { x: 0.67, y: 1 };
+                case 5: return { x: 0.33, y: 1 };
+                case 6: return { x: 0, y: 0.67 };
+                case 7: return { x: 0, y: 0.33 };
+            }
+            return { x: 0.5, y: 0.5 };
+        }
+
+        function getOppositePortOnNeighbor(port) {
+            // Map exiting port to neighbor entering port and row/col delta
+            switch(port) {
+                case 0: return { dr: -1, dc: 0, entryPort: 5 };
+                case 1: return { dr: -1, dc: 0, entryPort: 4 };
+                case 2: return { dr: 0, dc: 1, entryPort: 7 };
+                case 3: return { dr: 0, dc: 1, entryPort: 6 };
+                case 4: return { dr: 1, dc: 0, entryPort: 1 };
+                case 5: return { dr: 1, dc: 0, entryPort: 0 };
+                case 6: return { dr: 0, dc: -1, entryPort: 3 };
+                case 7: return { dr: 0, dc: -1, entryPort: 2 };
+            }
+            return null;
+        }
+
+        /* Get Outer Edge Start Notch Positions */
+        function getAvailableStartPorts() {
+            const list = [];
+            // Top edge (r = 0, ports 0, 1)
+            for (let c = 0; c < 6; c++) {
+                list.push({ r: 0, c: c, port: 0, edgeName: `顶 ${c*2+1}` });
+                list.push({ r: 0, c: c, port: 1, edgeName: `顶 ${c*2+2}` });
+            }
+            // Right edge (c = 5, ports 2, 3)
+            for (let r = 0; r < 6; r++) {
+                list.push({ r: r, c: 5, port: 2, edgeName: `右 ${r*2+1}` });
+                list.push({ r: r, c: 5, port: 3, edgeName: `右 ${r*2+2}` });
+            }
+            // Bottom edge (r = 5, ports 4, 5)
+            for (let c = 5; c >= 0; c--) {
+                list.push({ r: 5, c: c, port: 4, edgeName: `底 ${c*2+2}` });
+                list.push({ r: 5, c: c, port: 5, edgeName: `底 ${c*2+1}` });
+            }
+            // Left edge (c = 0, ports 6, 7)
+            for (let r = 5; r >= 0; r--) {
+                list.push({ r: r, c: 0, port: 6, edgeName: `左 ${r*2+2}` });
+                list.push({ r: r, c: 0, port: 7, edgeName: `左 ${r*2+1}` });
+            }
+            return list;
+        }
+
+        function drawTilePaths(ctx, tile, x, y, size) {
+            const paths = getRotatedPaths(tile.topo, tile.rotation);
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Draw tile background base
+            ctx.fillStyle = '#1c2331';
+            ctx.fillRect(1, 1, size - 2, size - 2);
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, size, size);
+
+            // Draw each curve
+            paths.forEach(pair => {
+                const p1 = getPortOffset(pair[0]);
+                const p2 = getPortOffset(pair[1]);
+
+                const x1 = p1.x * size;
+                const y1 = p1.y * size;
+                const x2 = p2.x * size;
+                const y2 = p2.y * size;
+
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+
+                // Control points toward tile center for organic curved lines
+                const cx1 = x1 + (size/2 - x1) * 0.65;
+                const cy1 = y1 + (size/2 - y1) * 0.65;
+                const cx2 = x2 + (size/2 - x2) * 0.65;
+                const cy2 = y2 + (size/2 - y2) * 0.65;
+
+                ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+
+                ctx.strokeStyle = '#d97706'; // Warm Amber path line
+                ctx.lineWidth = Math.max(3, size * 0.08);
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            });
+
+            ctx.restore();
+        }
+
+        function drawBoard() {
+            const canvas = document.getElementById('board-canvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Draw Board Grid Background
+            const margin = 30; // Border space for perimeter notches
+            const gridArea = w - margin * 2;
+            const tileSize = gridArea / BOARD_SIZE;
+
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(margin, margin, gridArea, gridArea);
+
+            // Grid Lines & Tiles
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const tx = margin + c * tileSize;
+                    const ty = margin + r * tileSize;
+
+                    const tile = gameState.board[r][c];
+                    if (tile) {
+                        drawTilePaths(ctx, tile, tx, ty, tileSize);
+                    } else {
+                        // Empty slot
+                        ctx.strokeStyle = '#334155';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(tx, ty, tileSize, tileSize);
+                    }
+                }
+            }
+
+            // Draw Hover / Active Placement Target Highlight
+            if (gameState.stage === 'PLAY' && !gameState.animating) {
+                const curPlayer = gameState.players[gameState.currentPlayerIndex];
+                if (curPlayer && curPlayer.alive && !curPlayer.isAI) {
+                    const target = getTargetSlotForPlayer(curPlayer);
+                    if (target) {
+                        const tx = margin + target.c * tileSize;
+                        const ty = margin + target.r * tileSize;
+
+                        // Preview currently selected hand card with rotation
+                        const card = curPlayer.hand[gameState.selectedCardIndex];
+                        if (card) {
+                            ctx.save();
+                            ctx.globalAlpha = 0.55;
+                            drawTilePaths(ctx, { topo: card.topo, rotation: gameState.selectedCardRotation }, tx, ty, tileSize);
+                            ctx.restore();
+                        }
+
+                        ctx.strokeStyle = '#10b981';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(tx + 2, ty + 2, tileSize - 4, tileSize - 4);
+                    }
+                }
+            }
+
+            // Draw Pawns / Players
+            gameState.players.forEach(p => {
+                if (!p.alive && !p.eliminatedPos) return;
+                if (!p.pos) return; // FIX: skip players who haven't chosen a start position yet
+
+                const pos = p.animPos || getPawnCanvasCoords(p.pos, margin, tileSize);
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, tileSize * 0.18, 0, Math.PI * 2);
+                ctx.fillStyle = p.alive ? p.color : '#64748b';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // Player Number Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${Math.floor(tileSize * 0.18)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(p.id + 1, pos.x, pos.y);
+                ctx.restore();
+            });
+        }
+
+        /**
+         * Calculate precise canvas pixel position for a pawn given its grid slot and port
+         */
+        function getPawnCanvasCoords(pos, margin, tileSize) {
+            const tx = margin + pos.c * tileSize;
+            const ty = margin + pos.r * tileSize;
+
+            // If pawn is at edge port before moving into grid
+            const offset = getPortOffset(pos.port);
+            return {
+                x: tx + offset.x * tileSize,
+                y: ty + offset.y * tileSize
+            };
+        }
+
+        function getTargetSlotForPlayer(player) {
+            if (!player.pos) return null;
+            // player.pos already IS the empty cell the pawn is waiting to enter,
+            // together with the port it will enter through - so that cell itself
+            // is the next placement target (no neighbor shift needed here).
+            const { r, c, port } = player.pos;
+            if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return null;
+            if (gameState.board[r][c]) return null; // already occupied
+            return { r, c, entryPort: port };
+        }
+
+        /**
+         * Calculate full continuous trajectory for a pawn starting from current position
+         */
+        function tracePawnPath(player) {
+            if (!player.pos) return [];
+            // curPort is the port through which the pawn ENTERS the tile at (curR, curC).
+            let curR = player.pos.r;
+            let curC = player.pos.c;
+            let curPort = player.pos.port;
+
+            const pathWaypoints = [];
+
+            while (true) {
+                // Resolve the tile actually sitting at the pawn's current cell first -
+                // this is what was placed this turn (or already existed there).
+                const tile = gameState.board[curR][curC];
+                if (!tile) break; // No tile here yet - pawn simply waits.
+
+                const tilePaths = getRotatedPaths(tile.topo, tile.rotation);
+                const connectedPair = tilePaths.find(pair => pair[0] === curPort || pair[1] === curPort);
+                if (!connectedPair) break;
+
+                const exitPort = (connectedPair[0] === curPort) ? connectedPair[1] : connectedPair[0];
+
+                // Move to whichever neighboring cell that exit port leads to.
+                const opp = getOppositePortOnNeighbor(exitPort);
+                if (!opp) break;
+
+                const nextR = curR + opp.dr;
+                const nextC = curC + opp.dc;
+
+                if (nextR < 0 || nextR >= BOARD_SIZE || nextC < 0 || nextC >= BOARD_SIZE) {
+                    // Path slides off the edge of the board!
+                    pathWaypoints.push({ r: nextR, c: nextC, port: opp.entryPort, outOfBounds: true });
+                    break;
+                }
+
+                curR = nextR;
+                curC = nextC;
+                curPort = opp.entryPort;
+
+                pathWaypoints.push({ r: curR, c: curC, port: curPort, outOfBounds: false });
+
+                // If the next cell is still empty, the pawn rests here until a future
+                // placement extends the path further.
+                if (!gameState.board[curR][curC]) break;
+            }
+
+            return pathWaypoints;
+        }
+
+        function confirmTilePlacement() {
+            if (gameState.stage !== 'PLAY' || gameState.animating) return;
+
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            if (!curPlayer.alive || curPlayer.isAI) return;
+
+            const target = getTargetSlotForPlayer(curPlayer);
+            if (!target) return;
+
+            const card = curPlayer.hand[gameState.selectedCardIndex];
+            if (!card) return;
+
+            executePlacement(curPlayer, target, card, gameState.selectedCardRotation);
+        }
+
+        function executePlacement(player, target, card, rotation) {
+            gameState.animating = true;
+            playSound('place');
+
+            // Place tile on board
+            gameState.board[target.r][target.c] = {
+                topo: card.topo,
+                rotation: rotation
+            };
+
+            // Remove card from player's hand and draw new one
+            const cardIdx = player.hand.indexOf(card);
+            if (cardIdx !== -1) player.hand.splice(cardIdx, 1);
+            if (gameState.deck.length > 0) {
+                player.hand.push(gameState.deck.pop());
+            }
+
+            // Animate all pawns affected by this tile placement
+            animateAllAffectedPawns(() => {
+                // Post-movement collision and elimination checks
+                checkCollisionsAndEliminations();
+
+                gameState.animating = false;
+
+                // Check victory condition
+                const survivors = gameState.players.filter(p => p.alive);
+                if (survivors.length <= 1) {
+                    triggerVictory(survivors[0] || player);
+                } else {
+                    nextTurn();
+                }
+            });
+        }
+
+        function animateAllAffectedPawns(onComplete) {
+            const margin = 30;
+            const tileSize = (600 - margin * 2) / BOARD_SIZE;
+
+            // Calculate movement waypoints for each alive player
+            const pawnTraces = [];
+            gameState.players.forEach(p => {
+                if (p.alive) {
+                    const waypoints = tracePawnPath(p);
+                    if (waypoints.length > 0) {
+                        pawnTraces.push({ player: p, waypoints: waypoints });
+                    }
+                }
+            });
+
+            if (pawnTraces.length === 0) {
+                drawBoard();
+                onComplete();
+                return;
+            }
+
+            playSound('slide');
+
+            // Sequential step-by-step sliding animation
+            let stepIndex = 0;
+
+            function stepAnimation() {
+                let moved = false;
+
+                pawnTraces.forEach(trace => {
+                    if (stepIndex < trace.waypoints.length) {
+                        moved = true;
+                        const wp = trace.waypoints[stepIndex];
+                        trace.player.pos = { r: wp.r, c: wp.c, port: wp.port };
+
+                        if (wp.outOfBounds) {
+                            trace.player.alive = false;
+                        }
+                    }
+                });
+
+                drawBoard();
+
+                if (moved) {
+                    stepIndex++;
+                    setTimeout(stepAnimation, 280);
+                } else {
+                    onComplete();
+                }
+            }
+
+            stepAnimation();
+        }
+
+        function checkCollisionsAndEliminations() {
+            // Check if multiple pawns landed on exact same grid slot & port
+            const posMap = {};
+
+            gameState.players.forEach(p => {
+                if (p.alive) {
+                    const key = `${p.pos.r},${p.pos.c},${p.pos.port}`;
+                    if (!posMap[key]) posMap[key] = [];
+                    posMap[key].push(p);
+                }
+            });
+
+            for (const key in posMap) {
+                if (posMap[key].length > 1) {
+                    playSound('elim');
+                    posMap[key].forEach(p => {
+                        p.alive = false;
+                    });
+                }
+            }
+        }
+
+        function nextTurn() {
+            // Advance turn to next alive player
+            let tries = 0;
+            do {
+                gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+                tries++;
+            } while (!gameState.players[gameState.currentPlayerIndex].alive && tries < gameState.players.length);
+
+            gameState.selectedCardIndex = 0;
+            gameState.selectedCardRotation = 0;
+
+            updateUI();
+            drawBoard();
+
+            // Trigger AI if current player is AI
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            if (curPlayer && curPlayer.alive && curPlayer.isAI) {
+                setTimeout(handleAITurn, 700);
+            }
+        }
+
+        function handleAITurn() {
+            if (gameState.stage === 'SELECT_START') {
+                // AI selects a random available start port
+                const available = getAvailableStartPorts().filter(sp => {
+                    return !gameState.players.some(p => p.pos && p.pos.r === sp.r && p.pos.c === sp.c && p.pos.port === sp.port);
+                });
+                if (available.length > 0) {
+                    const chosen = available[Math.floor(Math.random() * available.length)];
+                    selectStartPort(chosen.r, chosen.c, chosen.port);
+                }
+                return;
+            }
+
+            if (gameState.stage === 'PLAY') {
+                const curPlayer = gameState.players[gameState.currentPlayerIndex];
+                if (!curPlayer || !curPlayer.alive) return;
+
+                const target = getTargetSlotForPlayer(curPlayer);
+                if (!target) return;
+
+                // AI evaluates cards & rotations to find safest move
+                let bestMove = null;
+                let bestScore = -Infinity; // must always end up picking a move, even a fatal one
+
+                curPlayer.hand.forEach((card, cardIdx) => {
+                    for (let rot = 0; rot < 4; rot++) {
+                        // Simulate placement
+                        gameState.board[target.r][target.c] = { topo: card.topo, rotation: rot };
+                        const waypoints = tracePawnPath(curPlayer);
+
+                        let score = 0;
+                        if (waypoints.length > 0 && waypoints[waypoints.length - 1].outOfBounds) {
+                            score = -1000; // Death move
+                        } else {
+                            score = waypoints.length * 10 + Math.floor(Math.random() * 5);
+                        }
+
+                        // Revert simulation
+                        gameState.board[target.r][target.c] = null;
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { card: card, cardIdx: cardIdx, rot: rot };
+                        }
+                    }
+                });
+
+                if (bestMove) {
+                    gameState.selectedCardIndex = bestMove.cardIdx;
+                    gameState.selectedCardRotation = bestMove.rot;
+                    executePlacement(curPlayer, target, bestMove.card, bestMove.rot);
+                }
+            }
+        }
+
+        function renderStartPortsOverlay() {
+            const container = document.getElementById('start-ports-overlay');
+            container.innerHTML = '';
+
+            if (gameState.stage !== 'SELECT_START') return;
+
+            const margin = 30; // 30px
+            const tileSize = (600 - margin * 2) / BOARD_SIZE;
+
+            const available = getAvailableStartPorts().filter(sp => {
+                return !gameState.players.some(p => p.pos && p.pos.r === sp.r && p.pos.c === sp.c && p.pos.port === sp.port);
+            });
+
+            available.forEach(sp => {
+                const tx = margin + sp.c * tileSize;
+                const ty = margin + sp.r * tileSize;
+                const offset = getPortOffset(sp.port);
+
+                const px = ((tx + offset.x * tileSize) / 600) * 100;
+                const py = ((ty + offset.y * tileSize) / 600) * 100;
+
+                const btn = document.createElement('button');
+                // Slightly larger tap target for comfortable use on touch screens
+                btn.className = 'absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-white hover:bg-amber-400 border-2 border-amber-600 shadow-md outer-port pointer-events-auto';
+                btn.style.left = `${px}%`;
+                btn.style.top = `${py}%`;
+                btn.title = `在 ${sp.edgeName} 出发`;
+                btn.onclick = () => selectStartPort(sp.r, sp.c, sp.port);
+
+                container.appendChild(btn);
+            });
+        }
+
+        function selectStartPort(r, c, port) {
+            playSound('click');
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            curPlayer.pos = { r: r, c: c, port: port };
+
+            // Advance setup turn
+            if (gameState.currentPlayerIndex < gameState.players.length - 1) {
+                gameState.currentPlayerIndex++;
+                updateUI();
+                drawBoard();
+                renderStartPortsOverlay();
+
+                const nextP = gameState.players[gameState.currentPlayerIndex];
+                if (nextP.isAI) {
+                    setTimeout(handleAITurn, 500);
+                }
+            } else {
+                // All players have chosen start ports!
+                gameState.stage = 'PLAY';
+                gameState.currentPlayerIndex = 0;
+                updateUI();
+                drawBoard();
+                renderStartPortsOverlay();
+
+                const firstP = gameState.players[0];
+                if (firstP.isAI) {
+                    setTimeout(handleAITurn, 600);
+                }
+            }
+        }
+
+        function selectHandCard(idx) {
+            playSound('click');
+            gameState.selectedCardIndex = idx;
+            updateUI();
+            drawBoard();
+        }
+
+        function rotateSelectedCard(dir) {
+            playSound('click');
+            gameState.selectedCardRotation = ((gameState.selectedCardRotation + dir) % 4 + 4) % 4;
+            updateUI();
+            drawBoard();
+        }
+
+        function updateUI() {
+            const curPlayer = gameState.players[gameState.currentPlayerIndex];
+            const badge = document.getElementById('game-stage-badge');
+            const sub = document.getElementById('active-player-sub');
+            const statusBanner = document.getElementById('status-banner');
+
+            // Active Player Box
+            document.getElementById('active-player-name').innerText = curPlayer.name;
+            document.getElementById('active-player-name').style.color = curPlayer.color;
+            document.getElementById('active-player-avatar').innerText = curPlayer.id + 1;
+            document.getElementById('active-player-avatar').style.backgroundColor = curPlayer.color;
+
+            if (gameState.stage === 'SELECT_START') {
+                badge.innerText = "选择起点";
+                badge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                sub.innerText = "请点击棋盘边缘白色标记选定起点";
+                statusBanner.innerHTML = `轮到 <span style="color:${curPlayer.color}" class="font-bold">${curPlayer.name}</span> 选择棋盘边缘起点`;
+            } else if (gameState.stage === 'PLAY') {
+                badge.innerText = "铺路阶段";
+                badge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                sub.innerText = "选择手牌板块并在棋盘上点击放置";
+                statusBanner.innerHTML = `轮到 <span style="color:${curPlayer.color}" class="font-bold">${curPlayer.name}</span> 旋转并放置路线板块`;
+            }
+
+            document.getElementById('deck-count-text').innerText = `牌堆剩余: ${gameState.deck.length}`;
+
+            // Render Hand Cards
+            const container = document.getElementById('hand-cards-container');
+            container.innerHTML = '';
+
+            if (curPlayer.hand) {
+                curPlayer.hand.forEach((card, idx) => {
+                    const isSelected = (idx === gameState.selectedCardIndex);
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = `hand-card aspect-square rounded-xl p-1.5 cursor-pointer bg-slate-800 flex flex-col items-center justify-between ${isSelected ? 'selected' : ''}`;
+                    cardDiv.onclick = () => selectHandCard(idx);
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 70;
+                    canvas.height = 70;
+                    canvas.className = 'w-full h-full rounded';
+                    const ctx = canvas.getContext('2d');
+                    
+                    const rot = isSelected ? gameState.selectedCardRotation : 0;
+                    drawTilePaths(ctx, { topo: card.topo, rotation: rot }, 0, 0, 70);
+
+                    cardDiv.appendChild(canvas);
+                    container.appendChild(cardDiv);
+                });
+            }
+
+            // Enable/Disable placement button
+            const confirmBtn = document.getElementById('btn-confirm-place');
+            if (gameState.stage === 'PLAY' && !curPlayer.isAI && !gameState.animating) {
+                confirmBtn.disabled = false;
+                confirmBtn.className = "w-full mt-3 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-sm shadow-lg transition cursor-pointer";
+            } else {
+                confirmBtn.disabled = true;
+                confirmBtn.className = "w-full mt-3 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-sm shadow-lg transition opacity-50 cursor-not-allowed";
+            }
+
+            // Render Player Survival Scoreboard
+            const statusList = document.getElementById('player-status-list');
+            statusList.innerHTML = '';
+
+            gameState.players.forEach((p, idx) => {
+                const item = document.createElement('div');
+                const isCurrent = (idx === gameState.currentPlayerIndex);
+                
+                item.className = `p-2 rounded-xl border flex items-center justify-between transition ${
+                    isCurrent ? 'bg-slate-800 border-amber-500/60' : 'bg-slate-950/40 border-slate-800'
+                }`;
+
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${p.bgClass}">
+                            ${p.id + 1}
+                        </div>
+                        <span class="text-xs font-semibold text-slate-200">${p.name}</span>
+                    </div>
+                    <span class="text-[11px] font-bold ${p.alive ? 'text-emerald-400' : 'text-slate-500 line-through'}">
+                        ${p.alive ? '存活' : '已淘汰'}
+                    </span>
+                `;
+                statusList.appendChild(item);
+            });
+        }
+
+        function triggerVictory(winner) {
+            playSound('win');
+            gameState.stage = 'GAME_OVER';
+            document.getElementById('victory-announcement-text').innerText = `恭喜 ${winner.name} 成为唯一的幸存者，获得终极胜利！`;
+            document.getElementById('modal-victory').classList.remove('hidden');
+        }
+
+        /* Modal Toggle Functions */
+        function openSetupModal() { document.getElementById('modal-setup').classList.remove('hidden'); }
+        function closeSetupModal() { document.getElementById('modal-setup').classList.add('hidden'); }
+        function openRulesModal() { document.getElementById('modal-rules').classList.remove('hidden'); }
+        function closeRulesModal() { document.getElementById('modal-rules').classList.add('hidden'); }
+        function closeVictoryModal() { document.getElementById('modal-victory').classList.add('hidden'); }
+
+        function setPlayerCount(count) {
+            gameState.playerCount = count;
+            [2, 3, 4].forEach(c => {
+                const btn = document.getElementById(`btn-pc-${c}`);
+                if (c === count) {
+                    btn.className = "flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm shadow";
+                } else {
+                    btn.className = "flex-1 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-sm hover:bg-slate-700";
+                }
+            });
+        }
+
+        function setGameMode(mode) {
+            gameState.gameMode = mode;
+            const vsAi = document.getElementById('btn-mode-vs-ai');
+            const pvp = document.getElementById('btn-mode-pvp');
+
+            if (mode === 'ai') {
+                vsAi.className = "p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left";
+                pvp.className = "p-3 border border-slate-700 bg-slate-800 rounded-xl text-left hover:bg-slate-700";
+            } else {
+                pvp.className = "p-3 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-left";
+                vsAi.className = "p-3 border border-slate-700 bg-slate-800 rounded-xl text-left hover:bg-slate-700";
+            }
+        }
+
+        function startNewGame() {
+            closeSetupModal();
+            closeVictoryModal();
+
+            // Reset Board 6x6
+            gameState.board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            gameState.deck = createShuffledDeck();
+
+            // Create Players
+            gameState.players = [];
+            for (let i = 0; i < gameState.playerCount; i++) {
+                const conf = PLAYER_CONFIGS[i];
+                const isAI = (gameState.gameMode === 'ai' && i > 0);
+
+                // Draw 3 cards hand
+                const hand = [gameState.deck.pop(), gameState.deck.pop(), gameState.deck.pop()];
+
+                gameState.players.push({
+                    id: conf.id,
+                    name: isAI ? `AI 电脑 ${i}` : conf.name,
+                    color: conf.color,
+                    bgClass: conf.bgClass,
+                    isAI: isAI,
+                    hand: hand,
+                    pos: null,
+                    alive: true
+                });
+            }
+
+            gameState.currentPlayerIndex = 0;
+            gameState.stage = 'SELECT_START';
+            gameState.selectedCardIndex = 0;
+            gameState.selectedCardRotation = 0;
+
+            updateUI();
+            drawBoard();
+            renderStartPortsOverlay();
+        }
+
+        /* Initial Setup on Page Load */
+        window.onload = function() {
+            startNewGame();
+        };
+    </script>
+</body>
+</html>
