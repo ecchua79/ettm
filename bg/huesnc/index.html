@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hues & Cues 色彩同谋 - 网页版桌游</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            user-select: none;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+        }
+
+        /* Responsive Grid Styling */
+        .color-grid-container {
+            display: grid;
+            grid-template-columns: 28px repeat(30, minmax(18px, 1fr)) 28px;
+            gap: 1.5px;
+            background-color: #1e293b;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .color-cell {
+            aspect-ratio: 1 / 1;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, z-index 0.1s ease;
+            position: relative;
+        }
+
+        .color-cell:hover {
+            transform: scale(1.4);
+            z-index: 30;
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            border-radius: 4px;
+        }
+
+        .axis-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        /* Marker Tokens */
+        .marker-token {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 75%;
+            height: 75%;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: bold;
+            color: white;
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* Target scoring rings */
+        .ring-target {
+            border: 2px solid #ffffff !important;
+            box-shadow: 0 0 12px 2px #ffffff !important;
+            z-index: 25 !important;
+            animation: pulseTarget 1.2s infinite alternate;
+        }
+
+        .ring-3pt { outline: 2px solid #facc15; z-index: 20; }
+        .ring-2pt { outline: 2px dashed #38bdf8; z-index: 18; }
+        .ring-1pt { outline: 1px dotted #a855f7; z-index: 16; }
+
+        @keyframes pulseTarget {
+            0% { transform: scale(1); box-shadow: 0 0 8px #ffffff; }
+            100% { transform: scale(1.2); box-shadow: 0 0 18px #ffffff; }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 md:p-6 bg-slate-950 text-slate-100">
+
+    <!-- Navigation Header -->
+    <header class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+            <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-pink-500 via-purple-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                <i class="fa-solid font-bold text-white text-lg fa-palette"></i>
+            </div>
+            <div>
+                <h1 class="text-xl md:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-pink-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">
+                    Hues & Cues 色彩同谋
+                </h1>
+                <p class="text-xs text-slate-400 hidden sm:block">用线索寻找色彩 • 480色派对游戏</p>
+            </div>
+        </div>
+
+        <!-- Mode Switches -->
+        <div class="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-xs font-semibold">
+            <button id="mode-solo-btn" onclick="switchMode('solo')" class="px-3 py-1.5 rounded-lg transition-all bg-indigo-600 text-white shadow">
+                <i class="fa-solid fa-user-ninja mr-1"></i> 单人AI挑战
+            </button>
+            <button id="mode-party-btn" onclick="switchMode('party')" class="px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-white">
+                <i class="fa-solid fa-users mr-1"></i> 多人同屏
+            </button>
+            <button id="mode-online-btn" onclick="switchMode('online')" class="px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-white">
+                <i class="fa-solid fa-globe mr-1"></i> 网络连线
+            </button>
+            <button id="mode-explore-btn" onclick="switchMode('explore')" class="px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-white">
+                <i class="fa-solid fa-eye mr-1"></i> 自由探索
+            </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button onclick="toggleHelpModal()" class="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition">
+                <i class="fa-solid fa-circle-question text-lg"></i>
+            </button>
+            <button onclick="restartGame()" class="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition" title="重新开始">
+                <i class="fa-solid fa-rotate-right text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Dynamic Content -->
+    <main class="w-full max-w-7xl mx-auto my-4 flex-grow flex flex-col items-center justify-center gap-4">
+
+        <!-- Info & Control Bar above Grid -->
+        <div id="game-status-panel" class="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 backdrop-blur shadow-xl">
+            <!-- Left Info Block -->
+            <div class="flex items-center gap-4">
+                <div id="target-swatch-box" class="hidden flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                    <div id="target-swatch" class="w-10 h-10 rounded-lg shadow-inner border border-white/20"></div>
+                    <div>
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider block">目标颜色</span>
+                        <span id="target-coord" class="text-xs font-mono font-bold text-slate-200">??</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-medium text-slate-400" id="round-indicator">第 1 / 5 轮</div>
+                    <div class="text-lg font-bold text-white flex items-center gap-2" id="current-action-title">
+                        正在加载游戏...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clue display / Input area -->
+            <div id="clue-section" class="flex-grow max-w-lg mx-auto w-full md:w-auto flex flex-col items-center justify-center">
+                <!-- AI / Clue Display -->
+                <div id="clue-display-box" class="flex items-center justify-center gap-2 w-full">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">线索:</span>
+                    <div id="clues-container" class="flex gap-2">
+                        <span class="bg-slate-800 px-3 py-1 rounded-lg text-sm font-bold text-indigo-300 border border-indigo-500/30">等待出题...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Score / Action Buttons -->
+            <div class="flex items-center gap-3 ml-auto">
+                <div class="text-right">
+                    <div class="text-[10px] uppercase font-bold text-slate-400">当前总得分</div>
+                    <div id="score-value" class="text-2xl font-black text-amber-400">0</div>
+                </div>
+                <button id="primary-action-btn" onclick="handlePrimaryAction()" class="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25 transition-all transform active:scale-95 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-play"></i> 开始下一轮
+                </button>
+            </div>
+        </div>
+
+        <!-- Online Room Info Header Bar (Hidden by default) -->
+        <div id="online-room-header" class="w-full hidden bg-slate-900 border border-indigo-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs gap-2">
+            <div class="flex items-center gap-3">
+                <span class="bg-indigo-600 text-white font-black px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-key"></i> 房间码: <span id="display-room-code" class="text-amber-300 font-mono text-sm ml-1">----</span>
+                </span>
+                <button onclick="copyRoomCode()" class="text-indigo-400 hover:text-indigo-200 underline flex items-center gap-1">
+                    <i class="fa-solid fa-copy"></i> 复制房间码
+                </button>
+            </div>
+            <div id="online-players-chips" class="flex items-center gap-2 overflow-x-auto">
+                <!-- Connected players list -->
+            </div>
+        </div>
+
+        <!-- Color Board Grid Container -->
+        <div class="w-full flex justify-center items-center overflow-x-auto py-2">
+            <div id="color-grid" class="color-grid-container">
+                <!-- Grid items generated by JS -->
+            </div>
+        </div>
+
+        <!-- Color Inspector Tooltip Bar (Bottom) -->
+        <div class="w-full flex items-center justify-between text-xs text-slate-400 bg-slate-900/60 px-4 py-2 rounded-xl border border-slate-800/80">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-hand-pointer text-indigo-400"></i>
+                <span id="hover-coord-text">悬停在方格上可查看详细颜色参数</span>
+            </div>
+            <div id="hover-color-preview" class="flex items-center gap-3 opacity-0 transition-opacity">
+                <div id="hover-swatch" class="w-5 h-5 rounded border border-white/20"></div>
+                <span id="hover-color-hex" class="font-mono text-slate-200">#000000</span>
+                <span id="hover-color-hsl" class="font-mono text-slate-400">hsl(0,0%,0%)</span>
+                <span id="hover-color-name" class="font-bold text-indigo-300">未知色彩</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Rules Modal -->
+    <div id="help-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <button onclick="toggleHelpModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="flex items-center gap-3 mb-4">
+                <i class="fa-solid fa-book-open text-indigo-400 text-2xl"></i>
+                <h3 class="text-xl font-bold text-white">游戏规则说明</h3>
+            </div>
+
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed overflow-y-auto max-h-[70vh] pr-2">
+                <p><strong class="text-indigo-400">《Hues & Cues (色彩同谋)》</strong> 是一款基于色彩知觉与语言联想的派对桌游。棋盘包含 480 个渐变颜色。</p>
+                
+                <h4 class="font-bold text-white text-base pt-2 border-t border-slate-800">计分规则</h4>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 pl-1">
+                    <li><span class="text-amber-400 font-bold">精准命中（核心）：</span> 获得 <strong class="text-white">3 分</strong></li>
+                    <li><span class="text-sky-400 font-bold">相邻一圈（内圈）：</span> 获得 <strong class="text-white">2 分</strong></li>
+                    <li><span class="text-purple-400 font-bold">外围一圈（外圈）：</span> 获得 <strong class="text-white">1 分</strong></li>
+                </ul>
+
+                <h4 class="font-bold text-white text-base pt-2 border-t border-slate-800">游戏模式说明</h4>
+                <div class="space-y-2">
+                    <div>
+                        <span class="font-bold text-indigo-300"><i class="fa-solid fa-user-ninja"></i> 单人 AI 挑战模式：</span>
+                        <p class="text-xs text-slate-400">系统随机产生一个目标颜色并由 AI 给出提示词。你需要落子猜测，共进行 5 轮比赛，挑战高分！</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-indigo-300"><i class="fa-solid fa-users"></i> 多人派对模式（同屏 pass-and-play）：</span>
+                        <p class="text-xs text-slate-400">玩家轮流担任“出题者”。出题者秘密查看目标颜色，给出单词/双词线索，其他玩家下注棋子，最后揭晓计分！</p>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="toggleHelpModal()" class="w-full mt-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition">
+                明白，开始游戏！
+            </button>
+        </div>
+    </div>
+
+    <!-- Online Lobby / Join Room Modal -->
+    <div id="online-lobby-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2 text-indigo-400 font-bold text-lg">
+                    <i class="fa-solid fa-globe"></i> 网络连线对战
+                </div>
+                <button onclick="closeOnlineLobby()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Nickname Input -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">你的昵称：</label>
+                <input type="text" id="player-nickname" placeholder="输入玩家名字..." class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <!-- Tab Buttons: Create or Join -->
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="createOnlineRoom()" class="py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition flex flex-col items-center justify-center gap-1">
+                    <i class="fa-solid fa-plus-circle text-lg"></i>
+                    <span>创建新房间</span>
+                </button>
+                <div class="space-y-2">
+                    <input type="text" id="input-room-code" placeholder="输入4位房间码" maxlength="6" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-center text-amber-300 font-mono text-sm tracking-widest uppercase focus:outline-none focus:border-indigo-500">
+                    <button onclick="joinOnlineRoom()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition text-xs flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-right-to-bracket"></i> 加入已有房间
+                    </button>
+                </div>
+            </div>
+
+            <!-- Waiting Room Lobby (Hidden until joined) -->
+            <div id="room-waiting-area" class="hidden space-y-4 pt-3 border-t border-slate-800">
+                <div class="bg-slate-950 p-3 rounded-xl flex items-center justify-between">
+                    <span class="text-xs text-slate-400">房间状态: <strong class="text-indigo-300" id="lobby-status-text">大厅准备中...</strong></span>
+                    <span id="lobby-code-badge" class="bg-amber-500/20 text-amber-300 font-mono text-xs px-2 py-1 rounded border border-amber-500/30">????</span>
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 block mb-2">已就绪玩家列表：</span>
+                    <ul id="lobby-players-list" class="space-y-1.5 text-xs">
+                        <!-- Player items -->
+                    </ul>
+                </div>
+                <button id="start-online-game-btn" onclick="startOnlineGame()" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-xl shadow-lg transition hidden">
+                    <i class="fa-solid fa-play mr-1"></i> 房主开启游戏
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pass-and-Play Clue Giver Secret View Modal -->
+    <div id="clue-giver-modal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center relative">
+            
+            <div id="secret-lock-screen" class="space-y-4">
+                <i class="fa-solid fa-user-secret text-5xl text-indigo-400"></i>
+                <h3 class="text-xl font-bold text-white">请将屏幕交给出题者 <span id="giver-player-name" class="text-amber-400">玩家1</span></h3>
+                <p class="text-xs text-slate-400">其他玩家请闭上眼睛或避开屏幕！</p>
+                <button onclick="revealSecretCard()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition">
+                    我准备好了，查看目标色彩
+                </button>
+            </div>
+
+            <div id="secret-card-screen" class="hidden space-y-4">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest block">你的目标色彩与坐标</span>
+                
+                <div class="flex items-center justify-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div id="modal-target-swatch" class="w-16 h-16 rounded-xl border-2 border-white/20 shadow-lg"></div>
+                    <div class="text-left">
+                        <div id="modal-target-coord" class="text-2xl font-mono font-black text-white">A15</div>
+                        <div id="modal-target-name" class="text-xs text-indigo-300 font-semibold">橄榄绿</div>
+                    </div>
+                </div>
+
+                <div class="text-left space-y-3">
+                    <label class="block text-xs font-bold text-slate-300" id="cue-input-label">
+                        提示词 1（仅限 1 个词，例如：“苹果”）：
+                    </label>
+                    <input type="text" id="cue-text-input" placeholder="输入你的提示词..." class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <button onclick="submitClueFromModal()" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold rounded-xl shadow-lg transition">
+                    确认并让大家下注
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-7xl mx-auto pt-4 text-center text-xs text-slate-500 border-t border-slate-900">
+        Hues & Cues 网页版 • 适配 30×16 标准 480 色梯度 • 派对色彩对决
+    </footer>
+
+    <!-- Firebase SDK Imports for Online Sync -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration setup
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo-app.firebaseapp.com",
+            projectId: "demo-app",
+            storageBucket: "demo-app.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentUser = null;
+        let onlineRoomUnsub = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'hues-and-cues-game';
+
+        // Authenticate anonymously or with token
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const cred = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = cred.user;
+                } else {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                }
+            } catch (err) {
+                console.warn("Auth initialization fallback:", err);
+            }
+        }
+        initAuth();
+
+        window.onlineEngine = {
+            async createRoom(playerName) {
+                if (!currentUser) await initAuth();
+                const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+                const player = { id: currentUser ? currentUser.uid : crypto.randomUUID(), name: playerName || '玩家1', score: 0, color: '#06b6d4' };
+                
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'hues_rooms', roomCode);
+                const roomData = {
+                    roomCode: roomCode,
+                    hostId: player.id,
+                    status: 'waiting', // waiting, playing, finished
+                    players: [player],
+                    currentGiverIndex: 0,
+                    targetCell: null,
+                    clues: [],
+                    currentCueRound: 1,
+                    markers: [] // [{playerId, round, row, col}]
+                };
+
+                await setDoc(roomRef, roomData);
+                return roomCode;
+            },
+
+            async joinRoom(roomCode, playerName) {
+                if (!currentUser) await initAuth();
+                const code = roomCode.trim().toUpperCase();
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'hues_rooms', code);
+                const snap = await getDoc(roomRef);
+
+                if (!snap.exists()) throw new Error('房间不存在，请检查房间码');
+                const room = snap.data();
+                const myId = currentUser ? currentUser.uid : crypto.randomUUID();
+                
+                const colors = ['#06b6d4', '#f43f5e', '#10b981', '#a855f7', '#f59e0b', '#ec4899'];
+                if (!room.players.some(p => p.id === myId)) {
+                    const newPlayer = {
+                        id: myId,
+                        name: playerName || `玩家${room.players.length + 1}`,
+                        score: 0,
+                        color: colors[room.players.length % colors.length]
+                    };
+                    room.players.push(newPlayer);
+                    await updateDoc(roomRef, { players: room.players });
+                }
+                return code;
+            },
+
+            listenRoom(roomCode, callback) {
+                if (onlineRoomUnsub) onlineRoomUnsub();
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'hues_rooms', roomCode);
+                onlineRoomUnsub = onSnapshot(roomRef, (snap) => {
+                    if (snap.exists()) {
+                        callback(snap.data(), currentUser?.uid);
+                    }
+                }, (err) => {
+                    console.error("Room sync error:", err);
+                });
+            },
+
+            async updateRoomState(roomCode, updates) {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'hues_rooms', roomCode);
+                await updateDoc(roomRef, updates);
+            }
+        };
+    </script>
+
+    <script>
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playTone(freq, duration = 0.1, type = 'sine') {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+            click() { this.playTone(600, 0.05); }
+            place() { this.playTone(400, 0.08, 'triangle'); }
+            score() { 
+                this.playTone(523.25, 0.1); 
+                setTimeout(() => this.playTone(659.25, 0.15), 100);
+            }
+        }
+        const sound = new SoundEngine();
+
+        const COLS = 30;
+        const ROWS = 16;
+        const ROW_LABELS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
+
+        // Color Semantic Database for AI hints and Inspector
+        const COLOR_NAMES_DICT = [
+            { hMin: 0, hMax: 15, name: '红色/番茄红', cues: ['番茄', '苹果', '辣椒', '草莓', '消防车', '法拉利', '心形', '红领巾'] },
+            { hMin: 15, hMax: 45, name: '橙红/胡萝卜', cues: ['胡萝卜', '柿子', '夕阳', '橘子', '篮球', '狐狸', '秋叶'] },
+            { hMin: 45, hMax: 70, name: '黄色/向日葵', cues: ['向日葵', '香蕉', '柠檬', '出租车', '芝士', '海绵宝宝', '鸭子'] },
+            { hMin: 70, hMax: 150, name: '绿色/森林绿', cues: ['森林', '青草', '西瓜皮', '青蛙', '抹茶', '黄瓜', '薄荷', '翡翠'] },
+            { hMin: 150, hMax: 195, name: '青绿/青翠色', cues: ['孔雀', '湖水', '绿松石', '蒂芙尼', '冰川', '泳池'] },
+            { hMin: 195, hMax: 250, name: '蓝色/海洋蓝', cues: ['大海', '天空', '蓝莓', '牛仔裤', '夜空', '鲸鱼', '蓝宝'] },
+            { hMin: 250, hMax: 290, name: '紫色/葡萄紫', cues: ['葡萄', '茄子', '薰衣草', '紫罗兰', '芋泥', '紫水晶'] },
+            { hMin: 290, hMax: 330, name: '品红/洋红', cues: ['火龙果', '玫瑰', '芭比', '火烈鸟', '桃子', '泡泡糖'] },
+            { hMin: 330, hMax: 360, name: '鲜红/樱桃红', cues: ['樱桃', '血液', '枸杞', '红豆', '唇膏'] }
+        ];
+
+        let currentMode = 'solo'; // 'solo', 'party', 'online', 'explore'
+        let targetCell = null; // { row, col, h, s, l, hex }
+        let currentRound = 1;
+        const TOTAL_ROUNDS = 5;
+        let totalScore = 0;
+        let placedMarkers = []; // [{ playerIndex, round, row, col, color }]
+        let currentCueRound = 1; // 1 or 2
+        let partyClues = [];
+        let partyPlayers = [
+            { name: '玩家 1', color: '#ef4444', score: 0 },
+            { name: '玩家 2', color: '#3b82f6', score: 0 },
+            { name: '玩家 3', color: '#10b981', score: 0 }
+        ];
+        let partyClueGiverIndex = 0;
+        let partyCurrentGuesserIndex = 1;
+
+        // Online State Variables
+        let onlineRoomCode = null;
+        let onlineRoomData = null;
+        let currentUserId = null;
+
+        function hslToHex(h, s, l) {
+            l /= 100;
+            const a = s * Math.min(l, 1 - l) / 100;
+            const f = n => {
+                const k = (n + h / 30) % 12;
+                const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                return Math.round(255 * color).toString(16).padStart(2, '0');
+            };
+            return `#${f(0)}${f(8)}${f(4)}`;
+        }
+
+        function getCellHSL(r, c) {
+            const hue = Math.round((c / (COLS - 1)) * 350);
+            let sat, light;
+            if (r < 4) {
+                light = 85 - (r * 7);
+                sat = 50 + (r * 10);
+            } else if (r <= 11) {
+                sat = 95;
+                light = 55 - ((r - 4) * 3.5);
+            } else {
+                sat = 80 - ((r - 11) * 10);
+                light = 28 - ((r - 11) * 4);
+            }
+            return { h: hue, s: Math.max(10, Math.min(100, Math.round(sat))), l: Math.max(10, Math.min(95, Math.round(light))) };
+        }
+
+        function initGrid() {
+            const gridContainer = document.getElementById('color-grid');
+            gridContainer.innerHTML = '';
+
+            gridContainer.appendChild(createAxisLabel(''));
+            for (let c = 1; c <= COLS; c++) {
+                gridContainer.appendChild(createAxisLabel(c));
+            }
+            gridContainer.appendChild(createAxisLabel(''));
+
+            for (let r = 0; r < ROWS; r++) {
+                gridContainer.appendChild(createAxisLabel(ROW_LABELS[r]));
+
+                for (let c = 0; c < COLS; c++) {
+                    const hsl = getCellHSL(r, c);
+                    const hex = hslToHex(hsl.h, hsl.s, hsl.l);
+                    
+                    const cell = document.createElement('div');
+                    cell.className = 'color-cell';
+                    cell.style.backgroundColor = hex;
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.dataset.coord = `${ROW_LABELS[r]}${c + 1}`;
+                    cell.dataset.hex = hex;
+                    cell.dataset.hsl = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+
+                    cell.addEventListener('mouseenter', () => handleCellHover(r, c, hsl, hex));
+                    cell.addEventListener('click', () => handleCellClick(r, c));
+
+                    gridContainer.appendChild(cell);
+                }
+
+                gridContainer.appendChild(createAxisLabel(ROW_LABELS[r]));
+            }
+        }
+
+        function createAxisLabel(text) {
+            const div = document.createElement('div');
+            div.className = 'axis-label';
+            div.innerText = text;
+            return div;
+        }
+
+        function handleCellHover(r, c, hsl, hex) {
+            document.getElementById('hover-color-preview').style.opacity = '1';
+            document.getElementById('hover-swatch').style.backgroundColor = hex;
+            document.getElementById('hover-color-hex').innerText = hex.toUpperCase();
+            document.getElementById('hover-color-hsl').innerText = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+            document.getElementById('hover-coord-text').innerText = `坐标: ${ROW_LABELS[r]}${c + 1}`;
+
+            let name = '特殊混合色';
+            if (hsl.l > 82) name = '浅/粉色调';
+            else if (hsl.l < 20) name = '深/暗色调';
+            else {
+                const found = COLOR_NAMES_DICT.find(d => hsl.h >= d.hMin && hsl.h <= d.hMax);
+                if (found) name = found.name;
+            }
+            document.getElementById('hover-color-name').innerText = name;
+        }
+
+        function switchMode(mode) {
+            sound.click();
+            currentMode = mode;
+
+            document.getElementById('online-room-header').classList.add('hidden');
+
+            ['solo', 'party', 'online', 'explore'].forEach(m => {
+                const btn = document.getElementById(`mode-${m}-btn`);
+                if (btn) {
+                    btn.className = m === mode ? 
+                        'px-3 py-1.5 rounded-lg transition-all bg-indigo-600 text-white shadow' : 
+                        'px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-white';
+                }
+            });
+
+            if (mode === 'online') {
+                openOnlineLobby();
+            } else {
+                restartGame();
+            }
+        }
+
+        function restartGame() {
+            totalScore = 0;
+            currentRound = 1;
+            placedMarkers = [];
+            clearRingsAndMarkers();
+
+            document.getElementById('score-value').innerText = '0';
+
+            if (currentMode === 'solo') {
+                document.getElementById('target-swatch-box').classList.add('hidden');
+                setupSoloRound();
+            } else if (currentMode === 'party') {
+                document.getElementById('target-swatch-box').classList.remove('hidden');
+                partyClueGiverIndex = 0;
+                setupPartyRound();
+            } else if (currentMode === 'explore') {
+                document.getElementById('target-swatch-box').classList.add('hidden');
+                document.getElementById('round-indicator').innerText = '自由探索模式';
+                document.getElementById('current-action-title').innerText = '点击任意格查看或标记色彩';
+                document.getElementById('clues-container').innerHTML = '<span class="text-xs text-slate-400">无规则限制</span>';
+                document.getElementById('primary-action-btn').classList.add('hidden');
+            }
+        }
+
+        function setupSoloRound() {
+            clearRingsAndMarkers();
+            document.getElementById('primary-action-btn').classList.add('hidden');
+            document.getElementById('round-indicator').innerText = `单人挑战 • 第 ${currentRound} / ${TOTAL_ROUNDS} 轮`;
+            document.getElementById('current-action-title').innerText = '根据AI线索，点击棋盘猜测色彩！';
+
+            const r = Math.floor(Math.random() * ROWS);
+            const c = Math.floor(Math.random() * COLS);
+            const hsl = getCellHSL(r, c);
+            const hex = hslToHex(hsl.h, hsl.s, hsl.l);
+
+            targetCell = { row: r, col: c, h: hsl.h, s: hsl.s, l: hsl.l, hex: hex, coord: `${ROW_LABELS[r]}${c + 1}` };
+
+            const clueWord = generateAIClue(targetCell);
+            document.getElementById('clues-container').innerHTML = `
+                <span class="bg-indigo-900/80 text-indigo-200 border border-indigo-500/30 px-3 py-1 rounded-lg text-sm font-bold animate-pulse">
+                    <i class="fa-solid fa-robot mr-1"></i> ${clueWord}
+                </span>
+            `;
+            currentCueRound = 1;
+        }
+
+        function generateAIClue(cell) {
+            let matches = COLOR_NAMES_DICT.find(d => cell.h >= d.hMin && cell.h <= d.hMax);
+            let pool = matches ? matches.cues : ['色彩', '彩虹', '未知'];
+
+            let modifier = '';
+            if (cell.l > 75) modifier = '浅色/柔和的 ';
+            else if (cell.l < 30) modifier = '深色/暗色 ';
+
+            const randomCue = pool[Math.floor(Math.random() * pool.length)];
+            return `${modifier}${randomCue}`;
+        }
+
+        async function handleCellClick(r, c) {
+            sound.click();
+
+            if (currentMode === 'explore') {
+                addMarker(r, c, '#06b6d4', '★');
+                return;
+            }
+
+            if (currentMode === 'solo') {
+                if (placedMarkers.length >= 2) return;
+
+                const markerColor = placedMarkers.length === 0 ? '#38bdf8' : '#f43f5e';
+                const label = placedMarkers.length === 0 ? '1' : '2';
+                
+                placedMarkers.push({ row: r, col: c });
+                addMarker(r, c, markerColor, label);
+                sound.place();
+
+                if (placedMarkers.length === 1) {
+                    let secondHint = targetCell.s > 70 ? '鲜艳' : '沉稳';
+                    document.getElementById('clues-container').innerHTML += `
+                        <span class="bg-purple-900/80 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-lg text-sm font-bold">
+                            补充线索: ${secondHint}
+                        </span>
+                    `;
+                    document.getElementById('current-action-title').innerText = '请落子下注第 2 个猜测！';
+                } else if (placedMarkers.length === 2) {
+                    revealSoloScore();
+                }
+            } else if (currentMode === 'party') {
+                if (partyCurrentGuesserIndex === partyClueGiverIndex) return;
+
+                const player = partyPlayers[partyCurrentGuesserIndex];
+                placedMarkers.push({ playerIndex: partyCurrentGuesserIndex, round: currentCueRound, row: r, col: c });
+                addMarker(r, c, player.color, (partyCurrentGuesserIndex + 1).toString());
+                sound.place();
+
+                nextPartyGuesser();
+            } else if (currentMode === 'online') {
+                if (!onlineRoomData || !window.onlineEngine) return;
+
+                const giver = onlineRoomData.players[onlineRoomData.currentGiverIndex];
+                if (giver.id === currentUserId) return; // Clue giver cannot guess
+
+                // Check if user already placed marker this round
+                const myPlaced = onlineRoomData.markers.filter(m => m.playerId === currentUserId && m.round === onlineRoomData.currentCueRound);
+                if (myPlaced.length > 0) return;
+
+                const updatedMarkers = [...onlineRoomData.markers, {
+                    playerId: currentUserId,
+                    round: onlineRoomData.currentCueRound,
+                    row: r,
+                    col: c
+                }];
+
+                await window.onlineEngine.updateRoomState(onlineRoomCode, { markers: updatedMarkers });
+            }
+        }
+
+        // --- ONLINE MULTIPLAYER LOGIC ---
+        function openOnlineLobby() {
+            document.getElementById('online-lobby-modal').classList.remove('hidden');
+        }
+
+        function closeOnlineLobby() {
+            document.getElementById('online-lobby-modal').classList.add('hidden');
+        }
+
+        async function createOnlineRoom() {
+            const name = document.getElementById('player-nickname').value.trim() || '玩家1';
+            try {
+                onlineRoomCode = await window.onlineEngine.createRoom(name);
+                document.getElementById('room-waiting-area').classList.remove('hidden');
+                document.getElementById('lobby-code-badge').innerText = onlineRoomCode;
+                document.getElementById('start-online-game-btn').classList.remove('hidden');
+                
+                window.onlineEngine.listenRoom(onlineRoomCode, syncOnlineRoomState);
+            } catch (e) {
+                alert('创建房间失败: ' + e.message);
+            }
+        }
+
+        async function joinOnlineRoom() {
+            const code = document.getElementById('input-room-code').value.trim();
+            const name = document.getElementById('player-nickname').value.trim();
+            if (!code) { alert('请输入正确的房间码'); return; }
+
+            try {
+                onlineRoomCode = await window.onlineEngine.joinRoom(code, name);
+                document.getElementById('room-waiting-area').classList.remove('hidden');
+                document.getElementById('lobby-code-badge').innerText = onlineRoomCode;
+                document.getElementById('start-online-game-btn').classList.add('hidden'); // Only host starts
+
+                window.onlineEngine.listenRoom(onlineRoomCode, syncOnlineRoomState);
+            } catch (e) {
+                alert('加入失败: ' + e.message);
+            }
+        }
+
+        function copyRoomCode() {
+            if (!onlineRoomCode) return;
+            const temp = document.createElement('textarea');
+            temp.value = onlineRoomCode;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            alert(`已复制房间码: ${onlineRoomCode}`);
+        }
+
+        async function startOnlineGame() {
+            if (!onlineRoomData || onlineRoomData.players.length < 2) {
+                alert('网络对战至少需要 2 位玩家！');
+                return;
+            }
+
+            const r = Math.floor(Math.random() * ROWS);
+            const c = Math.floor(Math.random() * COLS);
+            const hsl = getCellHSL(r, c);
+            const hex = hslToHex(hsl.h, hsl.s, hsl.l);
+
+            await window.onlineEngine.updateRoomState(onlineRoomCode, {
+                status: 'playing',
+                currentGiverIndex: 0,
+                targetCell: { row: r, col: c, h: hsl.h, s: hsl.s, l: hsl.l, hex: hex, coord: `${ROW_LABELS[r]}${c + 1}` },
+                clues: [],
+                currentCueRound: 1,
+                markers: []
+            });
+            closeOnlineLobby();
+        }
+
+        function syncOnlineRoomState(room, myUid) {
+            onlineRoomData = room;
+            currentUserId = myUid;
+
+            // Sync Lobby Player list
+            const listEl = document.getElementById('lobby-players-list');
+            if (listEl) {
+                listEl.innerHTML = room.players.map((p, idx) => `
+                    <li class="flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="flex items-center gap-2 font-bold text-slate-200">
+                            <span class="w-3 h-3 rounded-full inline-block" style="background:${p.color}"></span>
+                            ${p.name} ${p.id === room.hostId ? '<i class="fa-solid fa-crown text-amber-400 text-xs"></i>' : ''}
+                        </span>
+                        <span class="text-slate-400 font-mono">${p.score}分</span>
+                    </li>
+                `).join('');
+            }
+
+            if (room.status === 'playing') {
+                closeOnlineLobby();
+                document.getElementById('online-room-header').classList.remove('hidden');
+                document.getElementById('display-room-code').innerText = room.roomCode;
+
+                // Render Connected player chips
+                document.getElementById('online-players-chips').innerHTML = room.players.map(p => `
+                    <span class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-200 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full" style="background:${p.color}"></span>
+                        ${p.name}: <strong class="text-amber-400">${p.score}</strong>
+                    </span>
+                `).join('');
+
+                const giver = room.players[room.currentGiverIndex];
+                const isGiver = giver.id === currentUserId;
+
+                document.getElementById('round-indicator').innerText = `网络对战 • 出题者: ${giver.name}`;
+                document.getElementById('target-swatch-box').classList.remove('hidden');
+
+                if (isGiver) {
+                    document.getElementById('target-swatch').style.backgroundColor = room.targetCell.hex;
+                    document.getElementById('target-coord').innerText = room.targetCell.coord;
+                } else {
+                    document.getElementById('target-swatch').style.backgroundColor = '#1e293b';
+                    document.getElementById('target-coord').innerText = '???';
+                }
+
+                // Render Clues
+                let cluesHtml = room.clues.map((c, i) => `
+                    <span class="bg-indigo-900/80 text-indigo-200 border border-indigo-500/30 px-3 py-1 rounded-lg text-sm font-bold">
+                        线索 ${i+1}: ${c}
+                    </span>
+                `).join('');
+                document.getElementById('clues-container').innerHTML = cluesHtml || '<span class="text-xs text-slate-400">等待出题者给出线索...</span>';
+
+                // Synchronize board markers
+                clearRingsAndMarkers();
+                room.markers.forEach(m => {
+                    const p = room.players.find(pl => pl.id === m.playerId);
+                    if (p) {
+                        const pIdx = room.players.indexOf(p) + 1;
+                        addMarker(m.row, m.col, p.color, pIdx.toString());
+                    }
+                });
+
+                // Check action turn
+                if (room.clues.length === 0) {
+                    if (isGiver) {
+                        document.getElementById('current-action-title').innerText = '你是出题者，请给出第一条线索！';
+                        openOnlineClueModal(1);
+                    } else {
+                        document.getElementById('current-action-title').innerText = `等待 ${giver.name} 发布第一条线索...`;
+                    }
+                } else if (room.clues.length === 1) {
+                    const nonGivers = room.players.filter(p => p.id !== giver.id);
+                    const markersC1 = room.markers.filter(m => m.round === 1);
+
+                    if (markersC1.length < nonGivers.length) {
+                        document.getElementById('current-action-title').innerText = '请各位玩家下注第一回合猜测！';
+                    } else {
+                        if (isGiver) {
+                            document.getElementById('current-action-title').innerText = '第一轮猜色完成，请发布补充线索！';
+                            openOnlineClueModal(2);
+                        } else {
+                            document.getElementById('current-action-title').innerText = `等待 ${giver.name} 发布补充线索...`;
+                        }
+                    }
+                } else if (room.clues.length === 2) {
+                    const nonGivers = room.players.filter(p => p.id !== giver.id);
+                    const markersC2 = room.markers.filter(m => m.round === 2);
+
+                    if (markersC2.length < nonGivers.length) {
+                        document.getElementById('current-action-title').innerText = '请各位玩家下注第二回合猜测！';
+                    } else {
+                        // All guessed! Reveal & Compute
+                        revealOnlineScore(room);
+                    }
+                }
+            }
+        }
+
+        function openOnlineClueModal(cueRound) {
+            const modal = document.getElementById('clue-giver-modal');
+            document.getElementById('secret-lock-screen').classList.add('hidden');
+            document.getElementById('secret-card-screen').classList.remove('hidden');
+
+            document.getElementById('modal-target-swatch').style.backgroundColor = onlineRoomData.targetCell.hex;
+            document.getElementById('modal-target-coord').innerText = onlineRoomData.targetCell.coord;
+            document.getElementById('cue-input-label').innerText = cueRound === 1 ? '第一轮线索（仅限 1 个词，例如：“苹果”）：' : '第二轮线索（补充说明，例如：“新鲜的”）：';
+            document.getElementById('cue-text-input').value = '';
+
+            modal.classList.remove('hidden');
+        }
+
+        async function submitClueFromModal() {
+            const text = document.getElementById('cue-text-input').value.trim();
+            if (!text) return;
+
+            sound.click();
+            document.getElementById('clue-giver-modal').classList.add('hidden');
+
+            if (currentMode === 'party') {
+                if (currentCueRound === 1) {
+                    partyClues = [text];
+                    document.getElementById('clues-container').innerHTML = `<span class="bg-indigo-900/80 text-indigo-200 border border-indigo-500/30 px-3 py-1 rounded-lg text-sm font-bold">线索 1: ${text}</span>`;
+                    partyCurrentGuesserIndex = (partyClueGiverIndex + 1) % partyPlayers.length;
+                    promptPartyGuesser();
+                } else {
+                    partyClues.push(text);
+                    document.getElementById('clues-container').innerHTML += `<span class="bg-purple-900/80 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-lg text-sm font-bold">线索 2: ${text}</span>`;
+                    partyCurrentGuesserIndex = (partyClueGiverIndex + 1) % partyPlayers.length;
+                    promptPartyGuesser();
+                }
+            } else if (currentMode === 'online') {
+                const updatedClues = [...onlineRoomData.clues, text];
+                await window.onlineEngine.updateRoomState(onlineRoomCode, {
+                    clues: updatedClues,
+                    currentCueRound: updatedClues.length
+                });
+            }
+        }
+
+        function revealOnlineScore(room) {
+            document.getElementById('target-coord').innerText = room.targetCell.coord;
+            document.getElementById('target-swatch').style.backgroundColor = room.targetCell.hex;
+            renderTargetRings(room.targetCell.row, room.targetCell.col);
+
+            const isHost = room.hostId === currentUserId;
+            const btn = document.getElementById('primary-action-btn');
+
+            if (isHost) {
+                btn.classList.remove('hidden');
+                btn.innerHTML = `<i class="fa-solid fa-forward"></i> 开启下一局`;
+                btn.onclick = async () => {
+                    const nextGiverIndex = (room.currentGiverIndex + 1) % room.players.length;
+                    const r = Math.floor(Math.random() * ROWS);
+                    const c = Math.floor(Math.random() * COLS);
+                    const hsl = getCellHSL(r, c);
+                    const hex = hslToHex(hsl.h, hsl.s, hsl.l);
+
+                    // Compute points to players
+                    let newPlayers = [...room.players];
+                    room.markers.forEach(m => {
+                        const dist = calculateDistance(m.row, m.col, room.targetCell.row, room.targetCell.col);
+                        let pts = 0;
+                        if (dist === 0) pts = 3;
+                        else if (dist === 1) pts = 2;
+                        else if (dist === 2) pts = 1;
+
+                        const pl = newPlayers.find(p => p.id === m.playerId);
+                        if (pl) pl.score += pts;
+                    });
+
+                    await window.onlineEngine.updateRoomState(onlineRoomCode, {
+                        players: newPlayers,
+                        currentGiverIndex: nextGiverIndex,
+                        targetCell: { row: r, col: c, h: hsl.h, s: hsl.s, l: hsl.l, hex: hex, coord: `${ROW_LABELS[r]}${c + 1}` },
+                        clues: [],
+                        currentCueRound: 1,
+                        markers: []
+                    });
+                };
+            } else {
+                btn.classList.add('hidden');
+            }
+            document.getElementById('current-action-title').innerText = `揭晓！目标色彩坐标为 ${room.targetCell.coord}`;
+        }
+
+        function addMarker(r, c, color, text) {
+            const cell = document.querySelector(`.color-cell[data-row="${r}"][data-col="${c}"]`);
+            if (!cell) return;
+
+            const token = document.createElement('div');
+            token.className = 'marker-token';
+            token.style.backgroundColor = color;
+            token.innerText = text;
+            cell.appendChild(token);
+        }
+
+        function calculateDistance(r1, c1, r2, c2) {
+            return Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2));
+        }
+
+        function revealSoloScore() {
+            renderTargetRings(targetCell.row, targetCell.col);
+
+            let roundPts = 0;
+            placedMarkers.forEach(m => {
+                const dist = calculateDistance(m.row, m.col, targetCell.row, targetCell.col);
+                if (dist === 0) roundPts += 3;
+                else if (dist === 1) roundPts += 2;
+                else if (dist === 2) roundPts += 1;
+            });
+
+            totalScore += roundPts;
+            sound.score();
+
+            document.getElementById('score-value').innerText = totalScore;
+            document.getElementById('current-action-title').innerText = `本轮得分: +${roundPts} 分！目标是 ${targetCell.coord}`;
+            
+            const btn = document.getElementById('primary-action-btn');
+            btn.classList.remove('hidden');
+            if (currentRound < TOTAL_ROUNDS) {
+                btn.innerHTML = `<i class="fa-solid fa-forward"></i> 下一轮 (${currentRound}/${TOTAL_ROUNDS})`;
+                btn.onclick = () => {
+                    currentRound++;
+                    setupSoloRound();
+                };
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-trophy"></i> 查看最终结算`;
+                btn.onclick = () => showFinalSummary();
+            }
+        }
+
+        function renderTargetRings(tr, tc) {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const dist = calculateDistance(r, c, tr, tc);
+                    const cell = document.querySelector(`.color-cell[data-row="${r}"][data-col="${c}"]`);
+                    if (!cell) continue;
+
+                    if (dist === 0) {
+                        cell.classList.add('ring-target');
+                    } else if (dist === 1) {
+                        cell.classList.add('ring-3pt');
+                    } else if (dist === 2) {
+                        cell.classList.add('ring-2pt');
+                    }
+                }
+            }
+        }
+
+        function clearRingsAndMarkers() {
+            document.querySelectorAll('.color-cell').forEach(cell => {
+                cell.classList.remove('ring-target', 'ring-3pt', 'ring-2pt', 'ring-1pt');
+                const token = cell.querySelector('.marker-token');
+                if (token) token.remove();
+            });
+            placedMarkers = [];
+        }
+
+        function setupPartyRound() {
+            clearRingsAndMarkers();
+            document.getElementById('primary-action-btn').classList.add('hidden');
+            document.getElementById('round-indicator').innerText = `多人同屏 • 出题者: ${partyPlayers[partyClueGiverIndex].name}`;
+
+            const r = Math.floor(Math.random() * ROWS);
+            const c = Math.floor(Math.random() * COLS);
+            const hsl = getCellHSL(r, c);
+            const hex = hslToHex(hsl.h, hsl.s, hsl.l);
+
+            targetCell = { row: r, col: c, h: hsl.h, s: hsl.s, l: hsl.l, hex: hex, coord: `${ROW_LABELS[r]}${c + 1}` };
+
+            document.getElementById('target-swatch').style.backgroundColor = hex;
+            document.getElementById('target-coord').innerText = '???';
+
+            openClueGiverModal();
+        }
+
+        function openClueGiverModal() {
+            const modal = document.getElementById('clue-giver-modal');
+            document.getElementById('secret-lock-screen').classList.remove('hidden');
+            document.getElementById('secret-card-screen').classList.add('hidden');
+            document.getElementById('giver-player-name').innerText = partyPlayers[partyClueGiverIndex].name;
+            modal.classList.remove('hidden');
+        }
+
+        function revealSecretCard() {
+            sound.click();
+            document.getElementById('secret-lock-screen').classList.add('hidden');
+            document.getElementById('secret-card-screen').classList.remove('hidden');
+            
+            document.getElementById('modal-target-swatch').style.backgroundColor = targetCell.hex;
+            document.getElementById('modal-target-coord').innerText = targetCell.coord;
+            
+            let name = COLOR_NAMES_DICT.find(d => targetCell.h >= d.hMin && targetCell.h <= d.hMax)?.name || '特别色彩';
+            document.getElementById('modal-target-name').innerText = name;
+            
+            document.getElementById('cue-input-label').innerText = currentCueRound === 1 ? '第一轮线索（仅限 1 个词，例如：“苹果”）：' : '第二轮线索（补充说明，例如：“鲜艳的”）：';
+            document.getElementById('cue-text-input').value = '';
+        }
+
+        function promptPartyGuesser() {
+            document.getElementById('current-action-title').innerText = `请 ${partyPlayers[partyCurrentGuesserIndex].name} 下注棋子！`;
+        }
+
+        function nextPartyGuesser() {
+            let count = 0;
+            do {
+                partyCurrentGuesserIndex = (partyCurrentGuesserIndex + 1) % partyPlayers.length;
+                count++;
+            } while (partyCurrentGuesserIndex === partyClueGiverIndex && count < partyPlayers.length);
+
+            const guessersCount = partyPlayers.length - 1;
+            const markersThisRound = placedMarkers.filter(m => m.round === currentCueRound).length;
+
+            if (markersThisRound < guessersCount) {
+                promptPartyGuesser();
+            } else {
+                if (currentCueRound === 1) {
+                    currentCueRound = 2;
+                    openClueGiverModal();
+                } else {
+                    revealPartyScore();
+                }
+            }
+        }
+
+        function revealPartyScore() {
+            document.getElementById('target-coord').innerText = targetCell.coord;
+            renderTargetRings(targetCell.row, targetCell.col);
+
+            let scoreSummary = [];
+            placedMarkers.forEach(m => {
+                const dist = calculateDistance(m.row, m.col, targetCell.row, targetCell.col);
+                let pts = 0;
+                if (dist === 0) pts = 3;
+                else if (dist === 1) pts = 2;
+                else if (dist === 2) pts = 1;
+
+                partyPlayers[m.playerIndex].score += pts;
+                if (pts > 0) {
+                    scoreSummary.push(`${partyPlayers[m.playerIndex].name} +${pts}`);
+                }
+            });
+
+            sound.score();
+            document.getElementById('current-action-title').innerText = `揭晓！目标坐标: ${targetCell.coord}`;
+            
+            const btn = document.getElementById('primary-action-btn');
+            btn.classList.remove('hidden');
+            btn.innerHTML = `<i class="fa-solid fa-rotate"></i> 下一位出题者`;
+            btn.onclick = () => {
+                partyClueGiverIndex = (partyClueGiverIndex + 1) % partyPlayers.length;
+                currentCueRound = 1;
+                setupPartyRound();
+            };
+        }
+
+        function showFinalSummary() {
+            const modal = document.getElementById('help-modal');
+            modal.querySelector('h3').innerText = '🎉 游戏结束 - 成绩结算';
+            modal.querySelector('.space-y-3').innerHTML = `
+                <div class="text-center py-4 space-y-2">
+                    <div class="text-4xl font-black text-amber-400">${totalScore} 分</div>
+                    <p class="text-xs text-slate-400">总共 5 轮色彩挑战完成！</p>
+                </div>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function toggleHelpModal() {
+            sound.click();
+            document.getElementById('help-modal').classList.toggle('hidden');
+        }
+
+        window.onload = () => {
+            sound.init();
+            initGrid();
+            restartGame();
+        };
+    </script>
+</body>
+</html>
