@@ -6,7 +6,7 @@
     <title>通路：生存连线 (Tsuro - Road Labyrinth)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- 引入 MQTT 实时联机库 (无需自定义后端) -->
+    <!-- 引入 MQTT 实时联机库 -->
     <script src="https://unpkg.com/mqtt@5.3.0/dist/mqtt.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
@@ -214,7 +214,7 @@
                 <i class="fa-solid fa-wifi text-emerald-400"></i>
                 <span>联机对战</span>
             </h3>
-            <p class="text-xs text-slate-400 mb-4">输入相同房间码即可与好友加入同一局对战，无需配置任何服务器。</p>
+            <p class="text-xs text-slate-400 mb-4">输入相同房间码即可与好友加入同一局对战。</p>
 
             <div id="online-step-join" class="space-y-4">
                 <div>
@@ -246,7 +246,7 @@
             <div id="online-step-lobby" class="hidden space-y-3">
                 <p class="text-sm text-slate-300">房间码：<span id="online-code-display" class="font-bold text-amber-400 tracking-widest"></span></p>
                 <div id="online-slot-list"></div>
-                <button id="online-start-btn" onclick="hostStartOnlineGame()" class="w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed" disabled>等待所有位置就位</button>
+                <button id="online-start-btn" onclick="hostStartOnlineGame()" class="w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed">等待所有位置就位</button>
             </div>
 
             <div class="mt-5 text-right">
@@ -1140,7 +1140,7 @@
         }
 
         /* ==========================================================
-           完全独立公共 MQTT 实时联机网络层（无 Claude 依赖）
+           完全独立公共 MQTT 实时联机网络层
         ========================================================== */
         function getMyUid() {
             let uid = localStorage.getItem('tsuro_uid');
@@ -1206,7 +1206,6 @@
         async function initMqttClient() {
             if (ONLINE.client && ONLINE.client.connected) return true;
             return new Promise((resolve) => {
-                // 连接免费公网 WebSocket MQTT 中间件
                 const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
                 const client = mqtt.connect(brokerUrl, {
                     clientId: ONLINE.myUid + '_' + Math.random().toString(36).substring(2, 6),
@@ -1251,14 +1250,12 @@
             localStorage.setItem('tsuro_room', code);
 
             ONLINE.client.subscribe(`tsuro/room/${code}`, () => {
-                // 广播请求房间状态
                 ONLINE.client.publish(`tsuro/room/${code}`, JSON.stringify({
                     type: 'REQ_SYNC',
                     senderUid: ONLINE.myUid
                 }));
             });
 
-            // 1 秒内无主机回应则自动升级为主机并建房
             setTimeout(() => {
                 if (!ONLINE.lobbyData && !ONLINE.active) {
                     createRoomAsHost();
@@ -1316,7 +1313,6 @@
         function handleOnlineMessage(msg) {
             if (!msg) return;
 
-            // 处理房间信息同步
             if (msg.type === 'REQ_SYNC') {
                 if (ONLINE.isHost) {
                     if (gameState.stage === 'LOBBY' || ONLINE.lobbyData) {
@@ -1338,12 +1334,20 @@
 
             if (msg.type === 'JOIN_SLOT_REQ') {
                 if (ONLINE.isHost && ONLINE.lobbyData) {
+                    // 先清空该玩家之前的占位
+                    ONLINE.lobbyData.players.forEach(p => {
+                        if (p.uid === msg.senderUid) {
+                            p.uid = null;
+                            if (!p.isAI) p.name = `等待玩家加入`;
+                        }
+                    });
+
                     const slot = ONLINE.lobbyData.players[msg.slotIdx];
-                    if (slot && !slot.isAI && !slot.uid) {
+                    if (slot && !slot.isAI) {
                         slot.uid = msg.senderUid;
                         slot.name = `玩家 ${msg.slotIdx + 1}`;
-                        broadcastLobbyState();
                     }
+                    broadcastLobbyState();
                 }
                 return;
             }
@@ -1381,6 +1385,8 @@
             const list = document.getElementById('online-slot-list');
             list.innerHTML = '';
 
+            const myCurrentSlot = lobby.players.findIndex(p => p.uid === ONLINE.myUid);
+
             lobby.players.forEach((p, idx) => {
                 const row = document.createElement('div');
                 row.className = 'flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 mb-2';
@@ -1391,7 +1397,11 @@
                 } else if (p.uid) {
                     rightHtml = `<span class="text-xs font-bold text-emerald-400">${p.uid === ONLINE.myUid ? '你' : '已加入'}</span>`;
                 } else {
-                    rightHtml = `<button class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold" onclick="joinSlot(${idx})">加入位置</button>`;
+                    if (myCurrentSlot !== -1) {
+                        rightHtml = `<button class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold" onclick="joinSlot(${idx})">换到此处</button>`;
+                    } else {
+                        rightHtml = `<button class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold" onclick="joinSlot(${idx})">加入位置</button>`;
+                    }
                 }
 
                 row.innerHTML = `<span class="text-sm font-semibold" style="color:${p.color}">玩家 ${idx + 1}</span>${rightHtml}`;
@@ -1400,11 +1410,28 @@
 
             const allFilled = lobby.players.every(p => p.isAI || p.uid);
             const startBtn = document.getElementById('online-start-btn');
-            startBtn.classList.toggle('hidden', !ONLINE.isHost);
-            startBtn.disabled = !allFilled;
-            startBtn.className = allFilled
-                ? "w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-sm shadow-lg cursor-pointer"
-                : "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+
+            if (ONLINE.isHost) {
+                startBtn.classList.remove('hidden');
+                startBtn.disabled = !allFilled;
+                if (allFilled) {
+                    startBtn.innerText = "🚀 开始游戏";
+                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-sm shadow-lg cursor-pointer";
+                } else {
+                    startBtn.innerText = "等待所有玩家就位...";
+                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+                }
+            } else {
+                startBtn.classList.remove('hidden');
+                startBtn.disabled = true;
+                if (allFilled) {
+                    startBtn.innerText = "等待房主点击开始游戏...";
+                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/30 text-center";
+                } else {
+                    startBtn.innerText = "等待其他玩家加入...";
+                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+                }
+            }
         }
 
         function joinSlot(idx) {
@@ -1450,7 +1477,6 @@
             document.getElementById('btn-leave-online').classList.add('hidden');
         }
 
-        /* 页面加载初始化 */
         window.onload = async function() {
             const savedRoom = localStorage.getItem('tsuro_room');
             if (savedRoom) {
