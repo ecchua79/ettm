@@ -130,7 +130,7 @@
                 </button>
                 <button onclick="openSetupModal()" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition flex items-center space-x-1.5">
                     <i class="fa-solid fa-rotate-right"></i>
-                    <span class="hidden xs:inline">新开局</span>
+                    <span class="hidden xs:inline">单机/人机</span>
                 </button>
             </div>
         </div>
@@ -219,11 +219,11 @@
             <div id="online-step-join" class="space-y-4">
                 <div>
                     <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">房间码（留空将自动生成）</label>
-                    <input id="online-room-code" type="text" maxlength="8" placeholder="例如 ABCD" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm uppercase tracking-widest text-center">
+                    <input id="online-room-code" type="text" maxlength="8" placeholder="例如 6543" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm uppercase tracking-widest text-center font-bold">
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">总人数</label>
+                        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">创建房间最大人数</label>
                         <select id="online-player-count" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm">
                             <option value="2">2 人</option>
                             <option value="3">3 人</option>
@@ -240,13 +240,19 @@
                         </select>
                     </div>
                 </div>
-                <button id="online-join-btn" onclick="joinOrCreateRoom()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm shadow-lg">创建 / 加入房间</button>
+                <button id="online-join-btn" onclick="joinOrCreateRoom()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm shadow-lg">进入 / 创建房间</button>
             </div>
 
             <div id="online-step-lobby" class="hidden space-y-3">
-                <p class="text-sm text-slate-300">房间码：<span id="online-code-display" class="font-bold text-amber-400 tracking-widest"></span></p>
-                <div id="online-slot-list"></div>
-                <button id="online-start-btn" onclick="hostStartOnlineGame()" class="w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed">等待所有位置就位</button>
+                <div class="flex items-center justify-between bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/60">
+                    <span class="text-xs text-slate-400">房间码：</span>
+                    <span id="online-code-display" class="font-bold text-amber-400 text-lg tracking-widest"></span>
+                </div>
+                <p class="text-[11px] text-slate-400">至少需要 2 名玩家就座即可由房主开启游戏。</p>
+
+                <div id="online-slot-list" class="space-y-2"></div>
+
+                <button id="online-start-btn" onclick="hostStartOnlineGame()" class="w-full mt-2 py-3 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed">等待玩家就位...</button>
             </div>
 
             <div class="mt-5 text-right">
@@ -260,7 +266,7 @@
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold font-oriental text-amber-400 mb-4 flex items-center space-x-2">
                 <i class="fa-solid fa-gamepad"></i>
-                <span>新建对局设置</span>
+                <span>单机 / 本地模式设置</span>
             </h3>
 
             <div class="space-y-4">
@@ -281,7 +287,7 @@
                             <div class="text-[11px] text-slate-400 mt-0.5">与 AI 电脑玩家竞技</div>
                         </button>
                         <button type="button" id="btn-mode-pvp" onclick="setGameMode('pvp')" class="p-3 border border-slate-700 bg-slate-800 rounded-xl text-left hover:bg-slate-700">
-                            <div class="font-bold text-slate-200 text-sm">👥 本地多人</div>
+                            <div class="font-bold text-slate-200 text-sm">👥 本地同屏</div>
                             <div class="text-[11px] text-slate-400 mt-0.5">多人在同一屏幕轮流</div>
                         </button>
                     </div>
@@ -1118,7 +1124,7 @@
 
                 gameState.players.push({
                     id: conf.id,
-                    name: isAI ? `AI 电脑 ${i}` : conf.name,
+                    name: isAI ? `AI 电脑 ${i + 1}` : conf.name,
                     color: conf.color,
                     bgClass: conf.bgClass,
                     isAI: isAI,
@@ -1242,7 +1248,7 @@
 
             const connected = await initMqttClient();
             if (!connected) {
-                alert('连接实时网络服务器失败，请检查网络后再试！');
+                alert('连接实时网络服务器失败，请检查网络后再比！');
                 return;
             }
 
@@ -1334,7 +1340,7 @@
 
             if (msg.type === 'JOIN_SLOT_REQ') {
                 if (ONLINE.isHost && ONLINE.lobbyData) {
-                    // 先清空该玩家之前的占位
+                    // 独占逻辑：移除该玩家在其他位置的占位
                     ONLINE.lobbyData.players.forEach(p => {
                         if (p.uid === msg.senderUid) {
                             p.uid = null;
@@ -1386,6 +1392,7 @@
             list.innerHTML = '';
 
             const myCurrentSlot = lobby.players.findIndex(p => p.uid === ONLINE.myUid);
+            const joinedCount = lobby.players.filter(p => p.isAI || p.uid).length;
 
             lobby.players.forEach((p, idx) => {
                 const row = document.createElement('div');
@@ -1393,14 +1400,15 @@
                 
                 let rightHtml;
                 if (p.isAI) {
-                    rightHtml = `<span class="text-xs font-bold text-amber-400">AI 电脑</span>`;
+                    rightHtml = `<span class="text-xs font-bold text-amber-400"><i class="fa-solid fa-robot mr-1"></i>AI 电脑</span>`;
                 } else if (p.uid) {
-                    rightHtml = `<span class="text-xs font-bold text-emerald-400">${p.uid === ONLINE.myUid ? '你' : '已加入'}</span>`;
+                    const isMe = (p.uid === ONLINE.myUid);
+                    rightHtml = `<span class="text-xs font-bold ${isMe ? 'text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20' : 'text-emerald-400'}">${isMe ? '你' : '已加入'}</span>`;
                 } else {
                     if (myCurrentSlot !== -1) {
-                        rightHtml = `<button class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold" onclick="joinSlot(${idx})">换到此处</button>`;
+                        rightHtml = `<button class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold transition" onclick="joinSlot(${idx})">换到此处</button>`;
                     } else {
-                        rightHtml = `<button class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold" onclick="joinSlot(${idx})">加入位置</button>`;
+                        rightHtml = `<button class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition" onclick="joinSlot(${idx})">加入位置</button>`;
                     }
                 }
 
@@ -1408,28 +1416,28 @@
                 list.appendChild(row);
             });
 
-            const allFilled = lobby.players.every(p => p.isAI || p.uid);
+            const canStart = joinedCount >= 2;
             const startBtn = document.getElementById('online-start-btn');
 
             if (ONLINE.isHost) {
                 startBtn.classList.remove('hidden');
-                startBtn.disabled = !allFilled;
-                if (allFilled) {
-                    startBtn.innerText = "🚀 开始游戏";
-                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-sm shadow-lg cursor-pointer";
+                startBtn.disabled = !canStart;
+                if (canStart) {
+                    startBtn.innerText = `🚀 开始游戏 (${joinedCount}/${lobby.players.length}人就绪)`;
+                    startBtn.className = "w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm shadow-lg cursor-pointer transition";
                 } else {
-                    startBtn.innerText = "等待所有玩家就位...";
-                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+                    startBtn.innerText = `等待玩家就位 (至少需要2人)...`;
+                    startBtn.className = "w-full mt-2 py-3 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
                 }
             } else {
                 startBtn.classList.remove('hidden');
                 startBtn.disabled = true;
-                if (allFilled) {
+                if (canStart) {
                     startBtn.innerText = "等待房主点击开始游戏...";
-                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/30 text-center";
+                    startBtn.className = "w-full mt-2 py-3 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/30 text-center";
                 } else {
-                    startBtn.innerText = "等待其他玩家加入...";
-                    startBtn.className = "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+                    startBtn.innerText = "等待更多玩家加入...";
+                    startBtn.className = "w-full mt-2 py-3 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
                 }
             }
         }
@@ -1446,16 +1454,30 @@
         function hostStartOnlineGame() {
             if (!ONLINE.isHost) return;
 
+            // 过滤只保留已加入或 AI 的有效玩家
+            const activeSlots = ONLINE.lobbyData.players.filter(p => p.isAI || p.uid);
+            if (activeSlots.length < 2) return;
+
             const deck = createShuffledDeck();
             const board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
 
-            ONLINE.lobbyData.players.forEach(p => {
-                p.hand = [deck.pop(), deck.pop(), deck.pop()];
-                p.pos = null;
-                p.alive = true;
+            // 重新整理玩家 ID 与配置
+            const finalPlayers = activeSlots.map((p, index) => {
+                const conf = PLAYER_CONFIGS[index];
+                return {
+                    id: index,
+                    name: p.isAI ? `AI 电脑 ${index + 1}` : `玩家 ${index + 1}`,
+                    color: conf.color,
+                    bgClass: conf.bgClass,
+                    isAI: p.isAI,
+                    uid: p.uid,
+                    hand: [deck.pop(), deck.pop(), deck.pop()],
+                    pos: null,
+                    alive: true
+                };
             });
 
-            gameState.players = ONLINE.lobbyData.players;
+            gameState.players = finalPlayers;
             gameState.board = board;
             gameState.deck = deck;
             gameState.stage = 'SELECT_START';
