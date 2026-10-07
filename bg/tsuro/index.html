@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>通路：生存连线 (Tsuro - Road Labyrinth)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
@@ -122,6 +123,14 @@
                     <i class="fa-solid fa-book-open text-amber-400"></i>
                     <span class="hidden sm:inline">玩法规则</span>
                 </button>
+                <button id="btn-leave-online" onclick="leaveOnline(); startNewGame();" class="hidden px-2.5 sm:px-3.5 py-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span class="hidden sm:inline">退出联机</span>
+                </button>
+                <button onclick="openOnlineModal()" class="px-2.5 sm:px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-wifi text-emerald-400"></i>
+                    <span class="hidden sm:inline">联机对战</span>
+                </button>
                 <button onclick="openSetupModal()" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition flex items-center space-x-1.5">
                     <i class="fa-solid fa-rotate-right"></i>
                     <span class="hidden xs:inline">新开局</span>
@@ -216,6 +225,69 @@
         《Tsuro 通路 / 生存连线》 HTML5 经典拼路桌游
     </footer>
 
+    <!-- MODAL: Online Multiplayer Lobby -->
+    <div id="modal-online" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold font-oriental text-amber-400 mb-1 flex items-center space-x-2">
+                <i class="fa-solid fa-wifi text-emerald-400"></i>
+                <span>联机对战</span>
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">直接点对点连线，不经过任何服务器。房主创建房间后，把房间码发给朋友，他们选"加入房间"输入同一个码即可。房主关闭页面会结束整局，这是零配置换来的取舍。</p>
+
+            <div id="online-step-join" class="space-y-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="tab-host-btn" type="button" onclick="switchOnlineTab('host')" class="p-2.5 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-xs font-bold text-amber-300">创建房间（当房主）</button>
+                    <button id="tab-join-btn" type="button" onclick="switchOnlineTab('join')" class="p-2.5 border border-slate-700 bg-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700">加入房间</button>
+                </div>
+
+                <div id="online-host-config" class="space-y-4">
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">房间码（留空将自动生成）</label>
+                        <input id="online-room-code-host" type="text" maxlength="8" placeholder="例如 ABCD" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm uppercase tracking-widest text-center">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">总人数</label>
+                            <select id="online-player-count" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm">
+                                <option value="2">2 人</option>
+                                <option value="3">3 人</option>
+                                <option value="4" selected>4 人</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">AI 补位数量</label>
+                            <select id="online-ai-count" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm">
+                                <option value="0" selected>0</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="online-host-btn" onclick="hostCreateRoom()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm shadow-lg">创建房间</button>
+                </div>
+
+                <div id="online-join-config" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-2 font-semibold">房主提供的房间码</label>
+                        <input id="online-room-code-join" type="text" maxlength="8" placeholder="例如 ABCD" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm uppercase tracking-widest text-center">
+                    </div>
+                    <button onclick="peerJoinRoom()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm shadow-lg">加入房间</button>
+                </div>
+            </div>
+
+            <div id="online-step-lobby" class="hidden space-y-3">
+                <p class="text-sm text-slate-300">房间码：<span id="online-code-display" class="font-bold text-amber-400 tracking-widest"></span></p>
+                <div id="online-slot-list"></div>
+                <button id="online-start-btn" onclick="hostStartOnlineGame()" class="w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed" disabled>等待所有位置就位</button>
+            </div>
+
+            <div class="mt-5 text-right">
+                <button onclick="closeOnlineModal()" class="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-sm font-semibold">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Game Setup -->
     <div id="modal-setup" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -297,7 +369,7 @@
             <h2 class="text-2xl font-bold font-oriental text-amber-300 mb-1">生存之王产生！</h2>
             <p id="victory-announcement-text" class="text-slate-300 text-sm font-medium mb-6">玩家 1 凭借高超的路线策略活到了最后！</p>
 
-            <button onclick="closeVictoryModal(); openSetupModal();" class="w-full py-3 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold rounded-xl shadow-lg">再来一局</button>
+            <button onclick="playAgain()" class="w-full py-3 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-slate-950 font-bold rounded-xl shadow-lg">再来一局</button>
         </div>
     </div>
 
@@ -572,7 +644,7 @@
             // Draw Hover / Active Placement Target Highlight
             if (gameState.stage === 'PLAY' && !gameState.animating) {
                 const curPlayer = gameState.players[gameState.currentPlayerIndex];
-                if (curPlayer && curPlayer.alive && !curPlayer.isAI) {
+                if (curPlayer && curPlayer.alive && !curPlayer.isAI && (!ONLINE.active || isMyActionableTurn())) {
                     const target = getTargetSlotForPlayer(curPlayer);
                     if (target) {
                         const tx = margin + target.c * tileSize;
@@ -699,6 +771,11 @@
 
         function confirmTilePlacement() {
             if (gameState.stage !== 'PLAY' || gameState.animating) return;
+            if (ONLINE.active && !isMyActionableTurn()) return;
+            if (ONLINE.active && !ONLINE.isHost) {
+                sendToHost({ type: 'place', cardIdx: gameState.selectedCardIndex, rotation: gameState.selectedCardRotation });
+                return;
+            }
 
             const curPlayer = gameState.players[gameState.currentPlayerIndex];
             if (!curPlayer.alive || curPlayer.isAI) return;
@@ -742,6 +819,7 @@
                     triggerVictory(survivors[0] || player);
                 } else {
                     nextTurn();
+                    broadcastState();
                 }
             });
         }
@@ -836,9 +914,10 @@
             updateUI();
             drawBoard();
 
-            // Trigger AI if current player is AI
+            // Trigger AI if current player is AI (local/hotseat only - in an online
+            // room only the host's client drives AI turns, via maybeRunHostAI()).
             const curPlayer = gameState.players[gameState.currentPlayerIndex];
-            if (curPlayer && curPlayer.alive && curPlayer.isAI) {
+            if (!ONLINE.active && curPlayer && curPlayer.alive && curPlayer.isAI) {
                 setTimeout(handleAITurn, 700);
             }
         }
@@ -903,6 +982,7 @@
             container.innerHTML = '';
 
             if (gameState.stage !== 'SELECT_START') return;
+            if (ONLINE.active && !isMyActionableTurn()) return; // not your turn to pick a start point
 
             const margin = 30; // 30px
             const tileSize = (600 - margin * 2) / BOARD_SIZE;
@@ -932,6 +1012,11 @@
         }
 
         function selectStartPort(r, c, port) {
+            if (ONLINE.active && !isMyActionableTurn()) return;
+            if (ONLINE.active && !ONLINE.isHost) {
+                sendToHost({ type: 'start', r: r, c: c, port: port });
+                return;
+            }
             playSound('click');
             const curPlayer = gameState.players[gameState.currentPlayerIndex];
             curPlayer.pos = { r: r, c: c, port: port };
@@ -944,7 +1029,7 @@
                 renderStartPortsOverlay();
 
                 const nextP = gameState.players[gameState.currentPlayerIndex];
-                if (nextP.isAI) {
+                if (!ONLINE.active && nextP.isAI) {
                     setTimeout(handleAITurn, 500);
                 }
             } else {
@@ -956,10 +1041,11 @@
                 renderStartPortsOverlay();
 
                 const firstP = gameState.players[0];
-                if (firstP.isAI) {
+                if (!ONLINE.active && firstP.isAI) {
                     setTimeout(handleAITurn, 600);
                 }
             }
+            broadcastState();
         }
 
         function selectHandCard(idx) {
@@ -1002,12 +1088,15 @@
 
             document.getElementById('deck-count-text').innerText = `牌堆剩余: ${gameState.deck.length}`;
 
-            // Render Hand Cards
+            // Render Hand Cards - always the local viewer's own hand, never
+            // whoever's turn it happens to be (matters once online: other
+            // players' hands arrive redacted and have no real tile data).
+            const myPlayer = getMyDisplayPlayer();
             const container = document.getElementById('hand-cards-container');
             container.innerHTML = '';
 
-            if (curPlayer.hand) {
-                curPlayer.hand.forEach((card, idx) => {
+            if (myPlayer && myPlayer.hand) {
+                myPlayer.hand.forEach((card, idx) => {
                     const isSelected = (idx === gameState.selectedCardIndex);
                     const cardDiv = document.createElement('div');
                     cardDiv.className = `hand-card aspect-square rounded-xl p-1.5 cursor-pointer bg-slate-800 flex flex-col items-center justify-between ${isSelected ? 'selected' : ''}`;
@@ -1029,7 +1118,8 @@
 
             // Enable/Disable placement button
             const confirmBtn = document.getElementById('btn-confirm-place');
-            if (gameState.stage === 'PLAY' && !curPlayer.isAI && !gameState.animating) {
+            const canActNow = !ONLINE.active || isMyActionableTurn();
+            if (gameState.stage === 'PLAY' && !curPlayer.isAI && !gameState.animating && canActNow) {
                 confirmBtn.disabled = false;
                 confirmBtn.className = "w-full mt-3 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-sm shadow-lg transition cursor-pointer";
             } else {
@@ -1067,8 +1157,30 @@
         function triggerVictory(winner) {
             playSound('win');
             gameState.stage = 'GAME_OVER';
+            gameState.winnerIndex = gameState.players.indexOf(winner);
             document.getElementById('victory-announcement-text').innerText = `恭喜 ${winner.name} 成为唯一的幸存者，获得终极胜利！`;
             document.getElementById('modal-victory').classList.remove('hidden');
+            broadcastState();
+        }
+
+        function showVictoryModalOnly(data) {
+            const modal = document.getElementById('modal-victory');
+            if (!modal.classList.contains('hidden')) return; // already showing (this client caused it)
+            const winner = data.players[data.winnerIndex];
+            if (!winner) return;
+            playSound('win');
+            document.getElementById('victory-announcement-text').innerText = `恭喜 ${winner.name} 成为唯一的幸存者，获得终极胜利！`;
+            modal.classList.remove('hidden');
+        }
+
+        function playAgain() {
+            closeVictoryModal();
+            if (ONLINE.active) {
+                leaveOnline();
+                openOnlineModal();
+            } else {
+                openSetupModal();
+            }
         }
 
         /* Modal Toggle Functions */
@@ -1105,6 +1217,7 @@
         }
 
         function startNewGame() {
+            if (ONLINE.active) leaveOnline();
             closeSetupModal();
             closeVictoryModal();
 
@@ -1129,7 +1242,8 @@
                     isAI: isAI,
                     hand: hand,
                     pos: null,
-                    alive: true
+                    alive: true,
+                    uid: null
                 });
             }
 
@@ -1143,8 +1257,297 @@
             renderStartPortsOverlay();
         }
 
+        /* ==========================================================
+           ONLINE MULTIPLAYER (WebRTC via PeerJS - no backend needed)
+           - The host's browser runs the real game engine; peers are
+             thin clients that send intent ("I pick this start point /
+             this card+rotation") and render whatever the host sends
+             back. This keeps everyone in sync with no server of our
+             own, and also lets the host send each peer a REDACTED
+             copy of the state - other players' hands are hidden,
+             you only ever receive your own.
+           - Known trade-off (by design, chosen for zero backend
+             setup): if the host's tab closes, the room ends for
+             everyone. A peer whose connection drops can rejoin the
+             same room while the host is still up (their browser
+             remembers a stable id), but there is no persistence
+             once the host itself is gone.
+        ========================================================== */
+        const ONLINE = {
+            active: false, isHost: false, roomCode: null,
+            peer: null, myPeerId: null, hostConn: null, conns: {},
+            lobbyPlayers: null
+        };
+
+        function getStablePeerId() {
+            let id = localStorage.getItem('tsuro_peer_id');
+            if (!id) { id = 'p-' + Math.random().toString(36).slice(2, 10); localStorage.setItem('tsuro_peer_id', id); }
+            return id;
+        }
+
+        function isMyActionableTurn() {
+            if (!ONLINE.active) return true;
+            const cur = gameState.players[gameState.currentPlayerIndex];
+            if (!cur) return false;
+            return cur.isAI ? ONLINE.isHost : (cur.peerId === ONLINE.myPeerId);
+        }
+
+        function getMyDisplayPlayer() {
+            if (ONLINE.active) {
+                const mine = gameState.players.find(p => p.peerId === ONLINE.myPeerId);
+                if (mine) return mine;
+            }
+            return gameState.players[gameState.currentPlayerIndex];
+        }
+
+        function sendToHost(msg) {
+            if (ONLINE.hostConn && ONLINE.hostConn.open) ONLINE.hostConn.send(msg);
+        }
+
+        // Host only: build the payload sent to one specific peer, with every
+        // OTHER player's hand redacted to just a count (card backs only).
+        function serializeForViewer(viewerPeerId) {
+            return gameState.players.map(p => {
+                if (p.peerId === viewerPeerId) return p;
+                return Object.assign({}, p, { hand: (p.hand || []).map(() => ({ hidden: true })) });
+            });
+        }
+
+        // Host only: push the authoritative state to every connected peer
+        // (each gets their own redacted view) and re-render the host's own UI.
+        function broadcastState() {
+            if (!ONLINE.active || !ONLINE.isHost) return;
+            const base = {
+                type: 'state', board: gameState.board,
+                deckCount: gameState.deck.length, stage: gameState.stage,
+                currentPlayerIndex: gameState.currentPlayerIndex,
+                winnerIndex: (gameState.winnerIndex === undefined) ? null : gameState.winnerIndex
+            };
+            Object.values(ONLINE.conns).forEach(conn => {
+                try { conn.send(Object.assign({}, base, { players: serializeForViewer(conn.peer) })); } catch (e) {}
+            });
+            updateUI();
+            drawBoard();
+            renderStartPortsOverlay();
+        }
+
+        function maybeRunHostAI() {
+            if (!ONLINE.active || !ONLINE.isHost) return;
+            const cur = gameState.players[gameState.currentPlayerIndex];
+            if (!cur || !cur.alive || !cur.isAI) return;
+            if (gameState.stage === 'SELECT_START') setTimeout(handleAITurn, 600);
+            else if (gameState.stage === 'PLAY' && !gameState.animating) setTimeout(handleAITurn, 700);
+        }
+
+        // Host only: a peer's intended move arrives here; validate it's really
+        // their turn, then run it through the normal (host-side) game logic.
+        function handleHostMessage(conn, msg) {
+            if (msg.type === 'join') {
+                const list = ONLINE.active ? gameState.players : ONLINE.lobbyPlayers;
+                let slot = list.find(p => p.peerId === conn.peer);
+                if (!slot) slot = list.find(p => !p.isAI && !p.peerId);
+                if (slot) { slot.peerId = conn.peer; if (!ONLINE.active) slot.name = `玩家 ${slot.id + 1}`; }
+                if (ONLINE.active) broadcastState(); else renderLobbyUI(ONLINE.lobbyPlayers, ONLINE.roomCode, true);
+                return;
+            }
+            if (!ONLINE.active) return;
+            const slotIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
+            if (slotIdx === -1 || slotIdx !== gameState.currentPlayerIndex) return; // ignore out-of-turn messages
+            if (msg.type === 'start') {
+                selectStartPort(msg.r, msg.c, msg.port);
+            } else if (msg.type === 'place') {
+                gameState.selectedCardIndex = msg.cardIdx;
+                gameState.selectedCardRotation = msg.rotation;
+                confirmTilePlacement();
+            }
+        }
+
+        // Peer only: the host's broadcast arrives here and is rendered as-is.
+        function handlePeerMessage(msg) {
+            if (msg.type === 'lobby') {
+                renderLobbyUI(msg.players, msg.roomCode, false);
+                return;
+            }
+            if (msg.type !== 'state') return;
+            ONLINE.active = true;
+            closeOnlineModal();
+            document.getElementById('btn-leave-online').classList.remove('hidden');
+            gameState.players = msg.players;
+            gameState.board = msg.board;
+            gameState.deck = Array(msg.deckCount || 0).fill(null);
+            gameState.stage = msg.stage;
+            gameState.currentPlayerIndex = msg.currentPlayerIndex;
+            gameState.winnerIndex = msg.winnerIndex;
+            gameState.selectedCardIndex = 0;
+            gameState.animating = false;
+            updateUI();
+            drawBoard();
+            renderStartPortsOverlay();
+            if (msg.stage === 'GAME_OVER') showVictoryModalOnly({ players: msg.players, winnerIndex: msg.winnerIndex });
+        }
+
+        function openOnlineModal() {
+            document.getElementById('modal-online').classList.remove('hidden');
+            document.getElementById('online-step-join').classList.remove('hidden');
+            document.getElementById('online-step-lobby').classList.add('hidden');
+            switchOnlineTab('host');
+        }
+        function closeOnlineModal() { document.getElementById('modal-online').classList.add('hidden'); }
+
+        function switchOnlineTab(tab) {
+            document.getElementById('online-host-config').classList.toggle('hidden', tab !== 'host');
+            document.getElementById('online-join-config').classList.toggle('hidden', tab !== 'join');
+            document.getElementById('tab-host-btn').className = tab === 'host'
+                ? "p-2.5 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-xs font-bold text-amber-300"
+                : "p-2.5 border border-slate-700 bg-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700";
+            document.getElementById('tab-join-btn').className = tab === 'join'
+                ? "p-2.5 border-2 border-amber-500 bg-amber-500/10 rounded-xl text-xs font-bold text-amber-300"
+                : "p-2.5 border border-slate-700 bg-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700";
+        }
+
+        function renderLobbyUI(players, roomCode, isHostView) {
+            document.getElementById('online-step-join').classList.add('hidden');
+            document.getElementById('online-step-lobby').classList.remove('hidden');
+            document.getElementById('online-code-display').innerText = roomCode || '';
+            const list = document.getElementById('online-slot-list');
+            list.innerHTML = '';
+            players.forEach(p => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 mb-2';
+                let right;
+                if (p.isAI) right = `<span class="text-xs font-bold text-amber-400">AI 电脑</span>`;
+                else if (p.peerId) right = `<span class="text-xs font-bold text-emerald-400">${p.peerId === ONLINE.myPeerId ? '你' : '已加入'}</span>`;
+                else right = `<span class="text-xs text-slate-500">等待玩家加入…</span>`;
+                row.innerHTML = `<span class="text-sm font-semibold" style="color:${p.color}">玩家 ${p.id + 1}</span>${right}`;
+                list.appendChild(row);
+            });
+            const allFilled = players.every(p => p.isAI || p.peerId);
+            const startBtn = document.getElementById('online-start-btn');
+            startBtn.classList.toggle('hidden', !isHostView);
+            startBtn.disabled = !allFilled;
+            startBtn.innerText = allFilled ? '开始游戏' : '等待所有位置就位';
+            startBtn.className = allFilled
+                ? "w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-sm"
+                : "w-full mt-2 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed";
+        }
+
+        function hostCreateRoom() {
+            if (typeof Peer === 'undefined') { alert('联机库加载失败，请检查网络连接后刷新页面重试。'); return; }
+            let code = document.getElementById('online-room-code-host').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!code) code = Math.random().toString(36).slice(2, 6).toUpperCase();
+            document.getElementById('online-room-code-host').value = code;
+            ONLINE.roomCode = code;
+            ONLINE.isHost = true;
+
+            const count = parseInt(document.getElementById('online-player-count').value, 10);
+            const aiCount = Math.min(parseInt(document.getElementById('online-ai-count').value, 10), count - 1);
+            const lobbyPlayers = [];
+            for (let i = 0; i < count; i++) {
+                const conf = PLAYER_CONFIGS[i];
+                const isAI = i >= (count - aiCount);
+                lobbyPlayers.push({ id: i, name: isAI ? `AI 电脑 ${i + 1}` : '等待玩家加入', color: conf.color, bgClass: conf.bgClass, isAI, peerId: null, hand: [], pos: null, alive: true });
+            }
+            ONLINE.lobbyPlayers = lobbyPlayers;
+
+            const btn = document.getElementById('online-host-btn');
+            btn.disabled = true; btn.innerText = '正在创建…';
+
+            const peer = new Peer('tsuro-' + code);
+            ONLINE.peer = peer;
+            peer.on('open', id => {
+                ONLINE.myPeerId = id;
+                lobbyPlayers[0].peerId = id;
+                lobbyPlayers[0].name = '玩家 1 (房主)';
+                localStorage.setItem('tsuro_room_role', 'host');
+                localStorage.setItem('tsuro_room_code', code);
+                renderLobbyUI(lobbyPlayers, code, true);
+            });
+            peer.on('connection', conn => {
+                conn.on('open', () => {
+                    ONLINE.conns[conn.peer] = conn;
+                    conn.on('data', msg => handleHostMessage(conn, msg));
+                    conn.on('close', () => { delete ONLINE.conns[conn.peer]; });
+                });
+            });
+            peer.on('error', err => {
+                btn.disabled = false; btn.innerText = '创建房间';
+                if (err.type === 'unavailable-id') alert('这个房间码已被占用，请换一个再试。');
+                else console.error(err);
+            });
+        }
+
+        function connectToHost(code) {
+            const myId = getStablePeerId();
+            const peer = new Peer(myId);
+            ONLINE.peer = peer;
+            ONLINE.isHost = false;
+            peer.on('open', id => {
+                ONLINE.myPeerId = id;
+                const conn = peer.connect('tsuro-' + code);
+                ONLINE.hostConn = conn;
+                conn.on('open', () => {
+                    localStorage.setItem('tsuro_room_role', 'peer');
+                    localStorage.setItem('tsuro_room_code', code);
+                    conn.send({ type: 'join' });
+                });
+                conn.on('data', handlePeerMessage);
+                conn.on('close', () => { alert('房主已断开连接，联机对局结束。'); leaveOnline(); startNewGame(); });
+            });
+            peer.on('error', err => {
+                console.error(err);
+                if (err.type === 'peer-unavailable') alert('找不到这个房间，请确认房间码正确，并且房主仍在线。');
+            });
+        }
+
+        function peerJoinRoom() {
+            if (typeof Peer === 'undefined') { alert('联机库加载失败，请检查网络连接后刷新页面重试。'); return; }
+            const code = document.getElementById('online-room-code-join').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!code) { alert('请输入房主提供的房间码'); return; }
+            ONLINE.roomCode = code;
+            connectToHost(code);
+        }
+
+        function hostStartOnlineGame() {
+            if (!ONLINE.isHost) return;
+            const deck = createShuffledDeck();
+            const board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            ONLINE.lobbyPlayers.forEach(p => { p.hand = [deck.pop(), deck.pop(), deck.pop()]; p.pos = null; p.alive = true; });
+            gameState.players = ONLINE.lobbyPlayers;
+            gameState.board = board;
+            gameState.deck = deck;
+            gameState.stage = 'SELECT_START';
+            gameState.currentPlayerIndex = 0;
+            gameState.winnerIndex = null;
+            gameState.selectedCardIndex = 0;
+            gameState.selectedCardRotation = 0;
+            gameState.animating = false;
+            ONLINE.active = true;
+            closeOnlineModal();
+            document.getElementById('btn-leave-online').classList.remove('hidden');
+            broadcastState();
+            maybeRunHostAI();
+        }
+
+        function leaveOnline() {
+            try { if (ONLINE.peer) ONLINE.peer.destroy(); } catch (e) {}
+            ONLINE.active = false; ONLINE.isHost = false; ONLINE.peer = null;
+            ONLINE.hostConn = null; ONLINE.conns = {}; ONLINE.lobbyPlayers = null;
+            localStorage.removeItem('tsuro_room_role');
+            localStorage.removeItem('tsuro_room_code');
+            document.getElementById('btn-leave-online').classList.add('hidden');
+        }
+
         /* Initial Setup on Page Load */
         window.onload = function() {
+            const role = localStorage.getItem('tsuro_room_role');
+            const code = localStorage.getItem('tsuro_room_code');
+            if (role === 'peer' && code) {
+                openOnlineModal();
+                switchOnlineTab('join');
+                document.getElementById('online-room-code-join').value = code;
+                connectToHost(code);
+                return;
+            }
             startNewGame();
         };
     </script>
